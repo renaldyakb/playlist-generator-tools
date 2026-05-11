@@ -3,6 +3,7 @@ from __future__ import annotations
 import random
 import shutil
 import threading
+import webbrowser
 from dataclasses import dataclass
 from pathlib import Path
 from tkinter import (
@@ -80,6 +81,10 @@ FILE_TYPES = {
 
 SUPPORTED_EXTENSIONS = set().union(*(extensions for _, extensions in FILE_TYPES.values()))
 
+APP_VERSION = "1.0.1"
+REPO_URL = "https://github.com/renaldyakb/playlist-generator-tools"
+LATEST_RELEASE_URL = f"{REPO_URL}/releases/latest"
+
 
 @dataclass(frozen=True)
 class Song:
@@ -129,6 +134,12 @@ class PlaylistGeneratorApp:
 
     def run(self) -> None:
         self.root.mainloop()
+
+    def open_repository(self) -> None:
+        webbrowser.open(REPO_URL)
+
+    def open_latest_release(self) -> None:
+        webbrowser.open(LATEST_RELEASE_URL)
 
     def _configure_theme(self) -> None:
         style = ttk.Style()
@@ -209,6 +220,16 @@ class PlaylistGeneratorApp:
         )
         style.map("Secondary.TButton", background=[("active", "#dbe6e0")])
         style.configure(
+            "Link.TButton",
+            background="#f3f6f4",
+            foreground="#24705d",
+            borderwidth=0,
+            focusthickness=0,
+            font=("Segoe UI", 9, "bold"),
+            padding=(10, 6),
+        )
+        style.map("Link.TButton", background=[("active", "#e7efeb")])
+        style.configure(
             "Field.TEntry",
             fieldbackground="#f8faf9",
             background="#f8faf9",
@@ -264,6 +285,7 @@ class PlaylistGeneratorApp:
         header = ttk.Frame(container, style="App.TFrame")
         header.grid(row=0, column=0, columnspan=2, sticky="ew", pady=(0, 20))
         header.columnconfigure(0, weight=1)
+        header.columnconfigure(1, weight=0)
 
         ttk.Label(header, text="Playlist Generator", style="Header.TLabel").grid(
             row=0, column=0, sticky="w"
@@ -273,6 +295,32 @@ class PlaylistGeneratorApp:
             text="Pilih folder atau file, susun otomatis, lalu copy ke folder tujuan dengan nomor urut.",
             style="Subheader.TLabel",
         ).grid(row=1, column=0, sticky="w", pady=(4, 0))
+
+        repo_actions = ttk.Frame(header, style="App.TFrame")
+        repo_actions.grid(row=0, column=1, rowspan=2, sticky="ne")
+        ttk.Label(
+            repo_actions,
+            text=f"v{APP_VERSION}",
+            style="Subheader.TLabel",
+        ).grid(row=0, column=0, sticky="e", padx=(0, 8))
+        ttk.Button(
+            repo_actions,
+            text="GitHub",
+            style="Link.TButton",
+            command=self.open_repository,
+        ).grid(row=0, column=1, sticky="e", padx=(0, 6))
+        ttk.Button(
+            repo_actions,
+            text="Star Repo",
+            style="Link.TButton",
+            command=self.open_repository,
+        ).grid(row=0, column=2, sticky="e", padx=(0, 6))
+        ttk.Button(
+            repo_actions,
+            text="Latest Release",
+            style="Link.TButton",
+            command=self.open_latest_release,
+        ).grid(row=0, column=3, sticky="e")
 
         self.left_panel = ttk.Frame(container, style="Panel.TFrame", padding=20)
         self.left_panel.grid(row=1, column=0, sticky="nsew", padx=(0, 18))

@@ -4,6 +4,7 @@ Aplikasi GUI ringan untuk memilih file dari folder atau drag & drop, membuat kum
 
 ## Fitur
 
+- Link GitHub, Star Repo, dan Latest Release langsung dari header aplikasi.
 - Pilih folder sumber, pilih beberapa file, atau drag & drop folder/file.
 - Deteksi jenis file:
   - Musik
@@ -105,3 +106,12 @@ pyinstaller --onefile --windowed --name PlaylistGenerator --collect-all tkinterd
 Hasil build akan ada di folder `dist`.
 
 Catatan: executable harus dibuild di OS target masing-masing. Build di Windows untuk `.exe`, build di macOS untuk aplikasi macOS, dan build di Linux untuk binary Linux.
+
+## Release GitHub
+
+Release Windows otomatis dibuat oleh GitHub Actions saat tag versi baru dipush, misalnya:
+
+```bash
+git tag v1.0.1
+git push origin v1.0.1
+```

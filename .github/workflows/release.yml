@@ -1,0 +1,49 @@
+name: Build Windows Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt
+          python -m pip install pyinstaller
+
+      - name: Build executable
+        run: |
+          python -m PyInstaller --onefile --windowed --name PlaylistGenerator --collect-all tkinterdnd2 playlist_generator.py
+
+      - name: Publish release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: Playlist Generator ${{ github.ref_name }}
+          body: |
+            Playlist Generator ${{ github.ref_name }}
+
+            Fitur:
+            - Tombol GitHub, Star Repo, dan Latest Release di header aplikasi.
+            - Dukungan musik, gambar, video, dan PDF.
+            - Filter dan jumlah file per jenis.
+            - Preview tree per jenis file.
+            - Output multi-jenis otomatis dipisah ke subfolder.
+
+            Download Windows: PlaylistGenerator-Windows.exe
+          files: dist/PlaylistGenerator.exe
