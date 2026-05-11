@@ -38,6 +38,14 @@ except Exception:
     TinyTag = None
     TINYTAG_AVAILABLE = False
 
+try:
+    from mutagen import File as MutagenFile
+
+    MUTAGEN_AVAILABLE = True
+except Exception:
+    MutagenFile = None
+    MUTAGEN_AVAILABLE = False
+
 
 AUDIO_EXTENSIONS = {
     ".aac",
@@ -91,7 +99,7 @@ FILE_TYPES = {
 
 SUPPORTED_EXTENSIONS = set().union(*(extensions for _, extensions in FILE_TYPES.values()))
 
-APP_VERSION = "1.1.0"
+APP_VERSION = "1.1.1"
 REPO_URL = "https://github.com/renaldyakb/playlist-generator-tools"
 LATEST_RELEASE_URL = f"{REPO_URL}/releases/latest"
 
@@ -1080,6 +1088,9 @@ class PlaylistGeneratorApp:
         duration = self.read_duration_with_ffprobe(path)
         if duration is not None:
             return duration
+        duration = self.read_duration_with_mutagen(path)
+        if duration is not None:
+            return duration
         return self.read_duration_with_tinytag(path)
 
     @staticmethod
@@ -1122,6 +1133,23 @@ class PlaylistGeneratorApp:
         except ValueError:
             return None
         return duration if duration > 0 else None
+
+    @staticmethod
+    def read_duration_with_mutagen(path: Path) -> float | None:
+        if not MUTAGEN_AVAILABLE or MutagenFile is None:
+            return None
+        try:
+            media = MutagenFile(str(path))
+        except Exception:
+            return None
+        if not media or not getattr(media, "info", None):
+            return None
+        duration = getattr(media.info, "length", None)
+        try:
+            duration_value = float(duration)
+        except (TypeError, ValueError):
+            return None
+        return duration_value if duration_value > 0 else None
 
     @staticmethod
     def read_duration_with_tinytag(path: Path) -> float | None:

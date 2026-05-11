@@ -69,7 +69,7 @@ Di beberapa sistem, perintahnya bisa:
 python3 playlist_generator.py
 ```
 
-Catatan timestamp: aplikasi akan mencoba membaca durasi audio/video dengan `ffprobe` jika tersedia, lalu fallback ke dependency ringan `tinytag`. Beberapa format video tertentu mungkin membutuhkan `ffprobe` agar durasinya terbaca akurat.
+Catatan timestamp: aplikasi akan mencoba membaca durasi audio/video dengan `ffprobe` jika tersedia, lalu fallback ke `mutagen` dan `tinytag`. Untuk video tertentu, `ffprobe` tetap direkomendasikan agar durasinya terbaca akurat.
 
 ## Build Menjadi Executable
 
@@ -109,7 +109,7 @@ Opsional, jika ingin build sendiri:
 ```bash
 pip install pyinstaller
 pip install -r requirements.txt
-pyinstaller --onefile --windowed --name PlaylistGenerator --collect-all tkinterdnd2 --collect-all tinytag playlist_generator.py
+pyinstaller --onefile --windowed --name PlaylistGenerator --collect-all tkinterdnd2 --collect-all tinytag --collect-all mutagen playlist_generator.py
 ```
 
 Hasil build akan ada di folder `dist`.

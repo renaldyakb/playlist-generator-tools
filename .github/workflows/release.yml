@@ -29,7 +29,7 @@ jobs:
 
       - name: Build executable
         run: |
-          python -m PyInstaller --onefile --windowed --name PlaylistGenerator --collect-all tkinterdnd2 --collect-all tinytag playlist_generator.py
+          python -m PyInstaller --onefile --windowed --name PlaylistGenerator --collect-all tkinterdnd2 --collect-all tinytag --collect-all mutagen playlist_generator.py
 
       - name: Publish release
         uses: softprops/action-gh-release@v2
