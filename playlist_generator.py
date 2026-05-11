@@ -99,7 +99,7 @@ FILE_TYPES = {
 
 SUPPORTED_EXTENSIONS = set().union(*(extensions for _, extensions in FILE_TYPES.values()))
 
-APP_VERSION = "1.1.1"
+APP_VERSION = "1.1.2"
 REPO_URL = "https://github.com/renaldyakb/playlist-generator-tools"
 LATEST_RELEASE_URL = f"{REPO_URL}/releases/latest"
 
@@ -1091,6 +1091,9 @@ class PlaylistGeneratorApp:
         duration = self.read_duration_with_mutagen(path)
         if duration is not None:
             return duration
+        duration = self.read_duration_from_mp3_frames(path)
+        if duration is not None:
+            return duration
         return self.read_duration_with_tinytag(path)
 
     @staticmethod
@@ -1150,6 +1153,147 @@ class PlaylistGeneratorApp:
         except (TypeError, ValueError):
             return None
         return duration_value if duration_value > 0 else None
+
+    @staticmethod
+    def read_duration_from_mp3_frames(path: Path) -> float | None:
+        if path.suffix.lower() != ".mp3":
+            return None
+
+        try:
+            file_size = path.stat().st_size
+            with path.open("rb") as file:
+                header = file.read(10)
+                audio_start = 0
+                if len(header) == 10 and header[:3] == b"ID3":
+                    tag_size = (
+                        ((header[6] & 0x7F) << 21)
+                        | ((header[7] & 0x7F) << 14)
+                        | ((header[8] & 0x7F) << 7)
+                        | (header[9] & 0x7F)
+                    )
+                    audio_start = 10 + tag_size
+                    if header[5] & 0x10:
+                        audio_start += 10
+
+                file.seek(audio_start)
+                search_data = file.read(512 * 1024)
+        except Exception:
+            return None
+
+        frame_offset = None
+        frame_info = None
+        for index in range(max(0, len(search_data) - 4)):
+            candidate = PlaylistGeneratorApp.parse_mp3_frame_header(search_data[index : index + 4])
+            if candidate:
+                frame_offset = audio_start + index
+                frame_info = candidate
+                break
+
+        if frame_offset is None or frame_info is None:
+            return None
+
+        vbr_duration = PlaylistGeneratorApp.read_vbr_mp3_duration(path, frame_offset, frame_info)
+        if vbr_duration is not None:
+            return vbr_duration
+
+        audio_size = file_size - frame_offset
+        try:
+            with path.open("rb") as file:
+                if file_size >= 128:
+                    file.seek(file_size - 128)
+                    if file.read(3) == b"TAG":
+                        audio_size -= 128
+        except Exception:
+            pass
+
+        bitrate = frame_info["bitrate"]
+        if audio_size <= 0 or bitrate <= 0:
+            return None
+        duration = (audio_size * 8) / (bitrate * 1000)
+        return duration if duration > 0 else None
+
+    @staticmethod
+    def parse_mp3_frame_header(header: bytes) -> dict[str, int] | None:
+        if len(header) != 4:
+            return None
+        value = int.from_bytes(header, "big")
+        if (value & 0xFFE00000) != 0xFFE00000:
+            return None
+
+        version_bits = (value >> 19) & 0b11
+        layer_bits = (value >> 17) & 0b11
+        bitrate_index = (value >> 12) & 0b1111
+        sample_rate_index = (value >> 10) & 0b11
+        channel_mode = (value >> 6) & 0b11
+
+        if version_bits == 0b01 or layer_bits == 0 or bitrate_index in (0, 15) or sample_rate_index == 3:
+            return None
+
+        version = {0b00: 25, 0b10: 2, 0b11: 1}[version_bits]
+        layer = {0b01: 3, 0b10: 2, 0b11: 1}[layer_bits]
+
+        bitrate_tables = {
+            (1, 1): [0, 32, 64, 96, 128, 160, 192, 224, 256, 288, 320, 352, 384, 416, 448],
+            (1, 2): [0, 32, 48, 56, 64, 80, 96, 112, 128, 160, 192, 224, 256, 320, 384],
+            (1, 3): [0, 32, 40, 48, 56, 64, 80, 96, 112, 128, 160, 192, 224, 256, 320],
+            (2, 1): [0, 32, 48, 56, 64, 80, 96, 112, 128, 144, 160, 176, 192, 224, 256],
+            (2, 2): [0, 8, 16, 24, 32, 40, 48, 56, 64, 80, 96, 112, 128, 144, 160],
+            (2, 3): [0, 8, 16, 24, 32, 40, 48, 56, 64, 80, 96, 112, 128, 144, 160],
+        }
+        table_version = 1 if version == 1 else 2
+        bitrate = bitrate_tables[(table_version, layer)][bitrate_index]
+
+        sample_rates = {
+            1: [44100, 48000, 32000],
+            2: [22050, 24000, 16000],
+            25: [11025, 12000, 8000],
+        }
+        sample_rate = sample_rates[version][sample_rate_index]
+
+        if layer == 1:
+            samples_per_frame = 384
+        elif layer == 2:
+            samples_per_frame = 1152
+        else:
+            samples_per_frame = 1152 if version == 1 else 576
+
+        return {
+            "version": version,
+            "layer": layer,
+            "bitrate": bitrate,
+            "sample_rate": sample_rate,
+            "channel_mode": channel_mode,
+            "samples_per_frame": samples_per_frame,
+        }
+
+    @staticmethod
+    def read_vbr_mp3_duration(path: Path, frame_offset: int, frame_info: dict[str, int]) -> float | None:
+        try:
+            with path.open("rb") as file:
+                file.seek(frame_offset)
+                frame_data = file.read(512)
+        except Exception:
+            return None
+
+        side_info_size = 17 if frame_info["channel_mode"] == 3 else 32
+        if frame_info["version"] != 1:
+            side_info_size = 9 if frame_info["channel_mode"] == 3 else 17
+
+        xing_offset = 4 + side_info_size
+        if len(frame_data) >= xing_offset + 16 and frame_data[xing_offset : xing_offset + 4] in (b"Xing", b"Info"):
+            flags = int.from_bytes(frame_data[xing_offset + 4 : xing_offset + 8], "big")
+            if flags & 0x0001:
+                frames = int.from_bytes(frame_data[xing_offset + 8 : xing_offset + 12], "big")
+                if frames > 0:
+                    return frames * frame_info["samples_per_frame"] / frame_info["sample_rate"]
+
+        vbri_offset = 36
+        if len(frame_data) >= vbri_offset + 18 and frame_data[vbri_offset : vbri_offset + 4] == b"VBRI":
+            frames = int.from_bytes(frame_data[vbri_offset + 14 : vbri_offset + 18], "big")
+            if frames > 0:
+                return frames * frame_info["samples_per_frame"] / frame_info["sample_rate"]
+
+        return None
 
     @staticmethod
     def read_duration_with_tinytag(path: Path) -> float | None:
