@@ -36,3 +36,6 @@ Thumbs.db
 desktop.ini
 .idea/
 .vscode/
+
+# Temporary cleanup folder
+_delete_tauri-react-python/

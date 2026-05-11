@@ -105,6 +105,10 @@ jobs:
             - macOS: PlaylistGenerator-macOS.zip atau PlaylistGenerator-macOS
 
             Fitur:
+            - Notifikasi update otomatis dari GitHub saat ada release baru.
+            - Tombol Cek Update di header aplikasi.
+            - Lock urutan file pada Preview Output.
+            - Drag urutan file pada Preview Output dengan indikator visual.
             - Tombol GitHub, Star Repo, dan Latest Release di header aplikasi.
             - Timestamp YouTube untuk file audio dan video.
             - Dukungan musik, gambar, video, dan PDF.

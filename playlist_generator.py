@@ -1,9 +1,12 @@
 from __future__ import annotations
 
+import json
 import random
+import re
 import shutil
 import subprocess
 import threading
+import urllib.request
 import webbrowser
 from dataclasses import dataclass
 from pathlib import Path
@@ -99,9 +102,12 @@ FILE_TYPES = {
 
 SUPPORTED_EXTENSIONS = set().union(*(extensions for _, extensions in FILE_TYPES.values()))
 
-APP_VERSION = "1.1.3"
+APP_VERSION = "1.1.4"
 REPO_URL = "https://github.com/renaldyakb/playlist-generator-tools"
 LATEST_RELEASE_URL = f"{REPO_URL}/releases/latest"
+LATEST_RELEASE_API_URL = (
+    "https://api.github.com/repos/renaldyakb/playlist-generator-tools/releases/latest"
+)
 
 
 @dataclass(frozen=True)
@@ -122,7 +128,7 @@ class PlaylistGeneratorApp:
     def __init__(self) -> None:
         self.root = TkinterDnD.Tk() if DND_AVAILABLE and TkinterDnD else Tk()
         self.root.title("Playlist Generator")
-        self.root.minsize(980, 640)
+        self.root.minsize(1080, 720)
         self.root.configure(bg="#f3f6f4")
 
         self.source_folder = StringVar()
@@ -143,6 +149,13 @@ class PlaylistGeneratorApp:
         self.count_sliders: dict[str, Scale] = {}
         self.count_spinboxes: dict[str, Spinbox] = {}
         self.song_tree_items: dict[str, Song] = {}
+        self.preview_tree_items: dict[str, Song] = {}
+        self.locked_preview_keys: set[str] = set()
+        self.custom_preview_order: list[str] = []
+        self.preview_drag_item: str | None = None
+        self.preview_drop_target: str | None = None
+        self.update_check_in_progress = False
+        self.update_notified_tag: str | None = None
         self.timestamp_text = ""
         self.dropped_paths: list[Path] = []
         self.songs: list[Song] = []
@@ -150,6 +163,7 @@ class PlaylistGeneratorApp:
 
         self._configure_theme()
         self._build_layout()
+        self.root.after(1400, self.check_for_updates_silent)
 
     def run(self) -> None:
         self.root.mainloop()
@@ -159,6 +173,129 @@ class PlaylistGeneratorApp:
 
     def open_latest_release(self) -> None:
         webbrowser.open(LATEST_RELEASE_URL)
+
+    def check_for_updates_silent(self) -> None:
+        self.start_update_check(show_current_message=False)
+
+    def check_for_updates_manual(self) -> None:
+        self.start_update_check(show_current_message=True)
+
+    def start_update_check(self, show_current_message: bool) -> None:
+        if self.update_check_in_progress:
+            if show_current_message:
+                self.status_text.set("Sedang mengecek update...")
+            return
+
+        self.update_check_in_progress = True
+        if show_current_message:
+            self.status_text.set("Mengecek update terbaru dari GitHub...")
+
+        thread = threading.Thread(
+            target=self._check_update_worker,
+            args=(show_current_message,),
+            daemon=True,
+        )
+        thread.start()
+
+    def _check_update_worker(self, show_current_message: bool) -> None:
+        try:
+            release = self.fetch_latest_release()
+        except Exception as exc:
+            self.root.after(
+                0,
+                self.finish_update_check,
+                None,
+                show_current_message,
+                str(exc),
+            )
+            return
+
+        self.root.after(0, self.finish_update_check, release, show_current_message, "")
+
+    def fetch_latest_release(self) -> dict[str, str]:
+        request = urllib.request.Request(
+            LATEST_RELEASE_API_URL,
+            headers={
+                "Accept": "application/vnd.github+json",
+                "User-Agent": f"PlaylistGenerator/{APP_VERSION}",
+            },
+        )
+        with urllib.request.urlopen(request, timeout=8) as response:
+            payload = json.loads(response.read().decode("utf-8"))
+
+        tag_name = str(payload.get("tag_name") or "").strip()
+        if not tag_name:
+            raise RuntimeError("Release terbaru belum ditemukan di GitHub.")
+
+        return {
+            "tag_name": tag_name,
+            "name": str(payload.get("name") or tag_name).strip(),
+            "html_url": str(payload.get("html_url") or LATEST_RELEASE_URL).strip(),
+            "published_at": str(payload.get("published_at") or "").strip(),
+        }
+
+    def finish_update_check(
+        self,
+        release: dict[str, str] | None,
+        show_current_message: bool,
+        error_message: str,
+    ) -> None:
+        self.update_check_in_progress = False
+
+        if release is None:
+            if show_current_message:
+                messagebox.showwarning(
+                    "Gagal cek update",
+                    (
+                        "Aplikasi belum bisa mengecek update dari GitHub.\n\n"
+                        f"Detail: {error_message}"
+                    ),
+                )
+                self.status_text.set("Gagal mengecek update. Coba lagi nanti.")
+            return
+
+        latest_tag = release["tag_name"]
+        if self.is_newer_version(latest_tag, APP_VERSION):
+            if not show_current_message and self.update_notified_tag == latest_tag:
+                return
+            self.update_notified_tag = latest_tag
+            self.show_update_available_modal(release)
+            return
+
+        if show_current_message:
+            messagebox.showinfo(
+                "Aplikasi sudah terbaru",
+                f"Kamu sudah memakai versi terbaru: v{APP_VERSION}",
+            )
+            self.status_text.set(f"Aplikasi sudah terbaru: v{APP_VERSION}")
+
+    def show_update_available_modal(self, release: dict[str, str]) -> None:
+        latest_tag = release["tag_name"]
+        latest_name = release["name"]
+        release_url = release["html_url"] or LATEST_RELEASE_URL
+        message = (
+            "Update baru tersedia.\n\n"
+            f"Versi kamu: v{APP_VERSION}\n"
+            f"Versi terbaru: {latest_tag}\n"
+            f"Release: {latest_name}\n\n"
+            "Buka halaman release GitHub untuk download sekarang?"
+        )
+        should_open = messagebox.askyesno("Update tersedia", message)
+        self.status_text.set(f"Update tersedia: {latest_tag}")
+        if should_open:
+            webbrowser.open(release_url)
+
+    def is_newer_version(self, latest_tag: str, current_version: str) -> bool:
+        latest = self.parse_version_parts(latest_tag)
+        current = self.parse_version_parts(current_version)
+        if latest and current:
+            return latest > current
+        return latest_tag.strip().lower().lstrip("v") != current_version.strip().lower().lstrip("v")
+
+    def parse_version_parts(self, value: str) -> tuple[int, ...]:
+        cleaned = value.strip().lower().lstrip("v")
+        parts = re.findall(r"\d+", cleaned)
+        return tuple(int(part) for part in parts)
 
     def _configure_theme(self) -> None:
         style = ttk.Style()
@@ -286,8 +423,29 @@ class PlaylistGeneratorApp:
             rowheight=24,
             font=("Segoe UI", 10),
         )
+        style.configure(
+            "File.Treeview.Heading",
+            background="#eef4f1",
+            foreground="#46534d",
+            font=("Segoe UI", 9, "bold"),
+        )
         style.map(
             "File.Treeview",
+            background=[("selected", "#24705d")],
+            foreground=[("selected", "#ffffff")],
+        )
+        style.configure(
+            "Drag.Treeview",
+            background="#eef7f4",
+            fieldbackground="#eef7f4",
+            foreground="#16211d",
+            bordercolor="#24705d",
+            borderwidth=1,
+            rowheight=24,
+            font=("Segoe UI", 10),
+        )
+        style.map(
+            "Drag.Treeview",
             background=[("selected", "#24705d")],
             foreground=[("selected", "#ffffff")],
         )
@@ -348,7 +506,13 @@ class PlaylistGeneratorApp:
             text="Latest Release",
             style="Link.TButton",
             command=self.open_latest_release,
-        ).grid(row=0, column=3, sticky="e")
+        ).grid(row=0, column=3, sticky="e", padx=(0, 6))
+        ttk.Button(
+            repo_actions,
+            text="Cek Update",
+            style="Link.TButton",
+            command=self.check_for_updates_manual,
+        ).grid(row=0, column=4, sticky="e")
 
         self.left_panel = ttk.Frame(container, style="Panel.TFrame", padding=20)
         self.left_panel.grid(row=1, column=0, sticky="nsew", padx=(0, 18))
@@ -567,21 +731,55 @@ class PlaylistGeneratorApp:
         scrollbar.grid(row=0, column=1, sticky="ns")
         self.song_tree.configure(yscrollcommand=scrollbar.set)
 
-        ttk.Label(self.right_panel, text="Preview Output", style="PanelTitle.TLabel").grid(
-            row=4, column=0, sticky="w", pady=(16, 8)
+        preview_header = ttk.Frame(self.right_panel, style="Plain.TFrame")
+        preview_header.grid(row=4, column=0, sticky="ew", pady=(16, 8))
+        preview_header.columnconfigure(0, weight=1)
+        ttk.Label(preview_header, text="Preview Output", style="PanelTitle.TLabel").grid(
+            row=0, column=0, sticky="w"
         )
+        self.preview_summary_label = ttk.Label(
+            preview_header,
+            text="0 file siap",
+            style="Muted.TLabel",
+        )
+        self.preview_summary_label.grid(row=0, column=1, sticky="e", padx=(0, 10))
+        ttk.Button(
+            preview_header,
+            text="Lock Pilihan",
+            style="Secondary.TButton",
+            command=self.toggle_preview_locks,
+        ).grid(row=0, column=2, sticky="e", padx=(0, 8))
+        ttk.Button(
+            preview_header,
+            text="Unlock Semua",
+            style="Secondary.TButton",
+            command=self.clear_preview_locks,
+        ).grid(row=0, column=3, sticky="e")
+
+        ttk.Label(
+            self.right_panel,
+            text="Drag file pada preview untuk mengatur urutan. Lock menjaga file tetap di posisi itu saat preview diacak ulang.",
+            style="Muted.TLabel",
+        ).grid(row=5, column=0, sticky="w", pady=(0, 8))
+
         preview_frame = Frame(self.right_panel, bg="#ffffff")
-        preview_frame.grid(row=5, column=0, sticky="ew")
+        preview_frame.grid(row=6, column=0, sticky="ew")
         preview_frame.columnconfigure(0, weight=1)
 
         self.preview_tree = ttk.Treeview(
             preview_frame,
             show="tree",
             height=8,
-            selectmode="none",
+            selectmode="extended",
             style="File.Treeview",
         )
         self.preview_tree.grid(row=0, column=0, sticky="ew")
+        self.preview_tree.bind("<ButtonPress-1>", self.on_preview_drag_start)
+        self.preview_tree.bind("<B1-Motion>", self.on_preview_drag_motion)
+        self.preview_tree.bind("<ButtonRelease-1>", self.on_preview_drag_release)
+        self.preview_tree.tag_configure("dragging", background="#d8ede7", foreground="#16211d")
+        self.preview_tree.tag_configure("drop-target", background="#c7e4da", foreground="#16211d")
+        self.preview_tree.tag_configure("moved", background="#e2f2ed", foreground="#16211d")
 
         preview_scrollbar = ttk.Scrollbar(
             preview_frame,
@@ -592,7 +790,7 @@ class PlaylistGeneratorApp:
         self.preview_tree.configure(yscrollcommand=preview_scrollbar.set)
 
         timestamp_header = ttk.Frame(self.right_panel, style="Plain.TFrame")
-        timestamp_header.grid(row=6, column=0, sticky="ew", pady=(16, 8))
+        timestamp_header.grid(row=7, column=0, sticky="ew", pady=(16, 8))
         timestamp_header.columnconfigure(0, weight=1)
         ttk.Label(
             timestamp_header,
@@ -609,7 +807,7 @@ class PlaylistGeneratorApp:
         self.copy_timestamp_button.grid(row=0, column=1, sticky="e")
 
         timestamp_frame = Frame(self.right_panel, bg="#ffffff")
-        timestamp_frame.grid(row=7, column=0, sticky="ew")
+        timestamp_frame.grid(row=8, column=0, sticky="ew")
         timestamp_frame.columnconfigure(0, weight=1)
 
         self.timestamp_box = Text(
@@ -803,6 +1001,11 @@ class PlaylistGeneratorApp:
             Song(path, self.get_category(path) or "music")
             for path in unique_files
         ]
+        available_keys = {self.song_key(song) for song in self.songs}
+        self.locked_preview_keys.intersection_update(available_keys)
+        self.custom_preview_order = [
+            key for key in self.custom_preview_order if key in available_keys
+        ]
 
         self.update_song_list()
         self.update_counts()
@@ -836,6 +1039,13 @@ class PlaylistGeneratorApp:
                 item_index += 1
 
         self.song_total_label.configure(text=f"{len(filtered)} file ditampilkan")
+
+    @staticmethod
+    def song_key(song: Song) -> str:
+        return str(song.path)
+
+    def song_by_key(self) -> dict[str, Song]:
+        return {self.song_key(song): song for song in self.filtered_songs()}
 
     def update_counts(self) -> None:
         counts = {key: 0 for key in FILE_TYPES}
@@ -914,6 +1124,11 @@ class PlaylistGeneratorApp:
     def apply_filters(self) -> None:
         self.update_song_list()
         self.sync_count_controls()
+        available_keys = {self.song_key(song) for song in self.filtered_songs()}
+        self.locked_preview_keys.intersection_update(available_keys)
+        self.custom_preview_order = [
+            key for key in self.custom_preview_order if key in available_keys
+        ]
         self.update_selection_preview()
 
     def on_type_count_change(self, category: str) -> None:
@@ -966,7 +1181,9 @@ class PlaylistGeneratorApp:
                     selected.extend(random.sample(category_files, quota))
             random.shuffle(selected)
 
+        selected = self.apply_locked_preview(selected, quotas)
         self.selected_songs = selected
+        self.custom_preview_order = [self.song_key(song) for song in selected]
         self.update_preview_tree(selected)
 
         if not self.songs:
@@ -979,6 +1196,76 @@ class PlaylistGeneratorApp:
             self.status_text.set(f"Pilih {total_count} file sesuai kuota jenis file.")
         else:
             self.status_text.set(f"Siap membuat output berisi {len(selected)} file.")
+
+    def apply_locked_preview(
+        self,
+        candidate_songs: list[Song],
+        quotas: dict[str, int],
+    ) -> list[Song]:
+        if sum(quotas.values()) <= 0 or not self.locked_preview_keys:
+            return candidate_songs
+
+        available = self.song_by_key()
+        locked_by_key = {
+            key: available[key]
+            for key in self.locked_preview_keys
+            if key in available and quotas.get(available[key].category, 0) > 0
+        }
+        if not locked_by_key:
+            return candidate_songs
+
+        previous_by_category = {key: [] for key in FILE_TYPES}
+        candidate_by_category = {key: [] for key in FILE_TYPES}
+        available_by_category = {key: [] for key in FILE_TYPES}
+
+        for song in self.selected_songs:
+            previous_by_category[song.category].append(song)
+        for song in candidate_songs:
+            candidate_by_category[song.category].append(song)
+        for song in available.values():
+            available_by_category[song.category].append(song)
+
+        result: list[Song] = []
+        for category in FILE_TYPES:
+            quota = quotas.get(category, 0)
+            if quota <= 0:
+                continue
+
+            category_result: list[Song | None] = [None] * quota
+            used_keys: set[str] = set()
+
+            for index, song in enumerate(previous_by_category[category]):
+                key = self.song_key(song)
+                if index < quota and key in locked_by_key:
+                    category_result[index] = locked_by_key[key]
+                    used_keys.add(key)
+
+            for key, song in locked_by_key.items():
+                if key in used_keys or song.category != category:
+                    continue
+                for index, current in enumerate(category_result):
+                    if current is None:
+                        category_result[index] = song
+                        used_keys.add(key)
+                        break
+
+            for pool in (candidate_by_category[category], available_by_category[category]):
+                for song in pool:
+                    key = self.song_key(song)
+                    if key in used_keys:
+                        continue
+                    empty_index = next(
+                        (index for index, current in enumerate(category_result) if current is None),
+                        None,
+                    )
+                    if empty_index is None:
+                        break
+                    category_result[empty_index] = song
+                    used_keys.add(key)
+
+            result.extend(song for song in category_result if song is not None)
+
+        return result
 
     def selected_categories(self, songs: list[Song]) -> set[str]:
         return {song.category for song in songs}
@@ -1009,6 +1296,13 @@ class PlaylistGeneratorApp:
 
     def update_preview_tree(self, songs: list[Song]) -> None:
         self.preview_tree.delete(*self.preview_tree.get_children())
+        self.preview_tree_items.clear()
+        locked_count = sum(
+            1 for song in songs if self.song_key(song) in self.locked_preview_keys
+        )
+        self.preview_summary_label.configure(
+            text=f"{len(songs)} file siap | {locked_count} locked"
+        )
         if not songs:
             return
 
@@ -1027,15 +1321,207 @@ class PlaylistGeneratorApp:
                 parents[key] = parent_id
 
             for index, (song, target) in enumerate(plan):
+                item_id = f"preview_file_{index}"
+                self.preview_tree_items[item_id] = song
                 self.preview_tree.insert(
                     parents[song.category],
                     "end",
-                    iid=f"preview_file_{index}",
-                    text=target.name,
+                    iid=item_id,
+                    text=self.preview_item_text(song, target.name),
                 )
         else:
-            for index, (_song, target) in enumerate(plan):
-                self.preview_tree.insert("", "end", iid=f"preview_file_{index}", text=target.name)
+            for index, (song, target) in enumerate(plan):
+                item_id = f"preview_file_{index}"
+                self.preview_tree_items[item_id] = song
+                self.preview_tree.insert(
+                    "",
+                    "end",
+                    iid=item_id,
+                    text=self.preview_item_text(song, target.name),
+                )
+
+    def preview_item_text(self, song: Song, output_name: str, drag_marker: str = "") -> str:
+        prefix = ""
+        if drag_marker:
+            prefix += f"{drag_marker} "
+        if self.song_key(song) in self.locked_preview_keys:
+            prefix += "[LOCK] "
+        return f"{prefix}{output_name}"
+
+    def selected_preview_songs(self) -> list[Song]:
+        selected: list[Song] = []
+        for item_id in self.preview_tree.selection():
+            if item_id in self.preview_tree_items:
+                selected.append(self.preview_tree_items[item_id])
+                continue
+            for child_id in self.preview_tree.get_children(item_id):
+                song = self.preview_tree_items.get(child_id)
+                if song:
+                    selected.append(song)
+        return selected
+
+    def toggle_preview_locks(self) -> None:
+        songs = self.selected_preview_songs()
+        if not songs:
+            self.status_text.set("Pilih file di Preview Output untuk lock atau unlock.")
+            return
+
+        keys = {self.song_key(song) for song in songs}
+        should_unlock = all(key in self.locked_preview_keys for key in keys)
+        if should_unlock:
+            self.locked_preview_keys.difference_update(keys)
+            action = "di-unlock"
+        else:
+            self.locked_preview_keys.update(keys)
+            action = "di-lock"
+
+        self.custom_preview_order = [self.song_key(song) for song in self.selected_songs]
+        self.update_preview_tree(self.selected_songs)
+        self.status_text.set(f"{len(songs)} file preview berhasil {action}.")
+
+    def clear_preview_locks(self) -> None:
+        if not self.locked_preview_keys:
+            self.status_text.set("Belum ada file preview yang terkunci.")
+            return
+        self.locked_preview_keys.clear()
+        self.update_preview_tree(self.selected_songs)
+        self.status_text.set("Semua lock preview sudah dilepas.")
+
+    def on_preview_drag_start(self, event) -> None:
+        item_id = self.preview_tree.identify_row(event.y)
+        self.preview_drag_item = item_id if item_id in self.preview_tree_items else None
+        self.preview_drop_target = None
+        if self.preview_drag_item:
+            self.preview_tree.configure(style="Drag.Treeview")
+            self.mark_preview_drag_state(self.preview_drag_item, "dragging")
+            self.preview_tree.selection_set(self.preview_drag_item)
+            self.status_text.set("Sedang drag file preview. Lepaskan pada posisi tujuan.")
+
+    def on_preview_drag_motion(self, event) -> None:
+        if not self.preview_drag_item:
+            return
+
+        target_id = self.preview_tree.identify_row(event.y)
+        if (
+            not target_id
+            or target_id == self.preview_drag_item
+            or target_id not in self.preview_tree_items
+            or self.preview_tree.parent(target_id) != self.preview_tree.parent(self.preview_drag_item)
+        ):
+            self.clear_preview_drop_target()
+            return
+
+        if target_id == self.preview_drop_target:
+            return
+
+        self.clear_preview_drop_target()
+        self.preview_drop_target = target_id
+        self.mark_preview_drag_state(target_id, "drop-target")
+
+    def on_preview_drag_release(self, event) -> None:
+        if not self.preview_drag_item:
+            return
+
+        target_id = self.preview_tree.identify_row(event.y)
+        dragged_id = self.preview_drag_item
+        self.preview_drag_item = None
+        self.preview_tree.configure(style="File.Treeview")
+        self.clear_preview_drag_marks()
+
+        if not target_id or dragged_id == target_id or target_id not in self.preview_tree_items:
+            self.preview_drop_target = None
+            return
+
+        source_parent = self.preview_tree.parent(dragged_id)
+        target_parent = self.preview_tree.parent(target_id)
+        if source_parent != target_parent:
+            self.status_text.set("Drag preview hanya bisa di dalam jenis file yang sama.")
+            self.preview_drop_target = None
+            return
+
+        target_index = self.preview_tree.index(target_id)
+        self.preview_tree.move(dragged_id, source_parent, target_index)
+        self.preview_drop_target = None
+        self.sync_preview_order_from_tree([dragged_id, target_id])
+
+    def clear_preview_drop_target(self) -> None:
+        if self.preview_drop_target and self.preview_drop_target in self.preview_tree_items:
+            self.mark_preview_drag_state(self.preview_drop_target, None)
+        self.preview_drop_target = None
+
+    def clear_preview_drag_marks(self) -> None:
+        for item_id in list(self.preview_tree_items):
+            self.mark_preview_drag_state(item_id, None)
+
+    def mark_preview_drag_state(self, item_id: str, state: str | None) -> None:
+        song = self.preview_tree_items.get(item_id)
+        if not song or not self.preview_tree.exists(item_id):
+            return
+        current_text = self.preview_tree.item(item_id, "text")
+        output_name = (
+            current_text
+            .replace("[DRAG] ", "")
+            .replace("[DROP HERE] ", "")
+            .replace("[MOVED] ", "")
+            .replace("[LOCK] ", "")
+        )
+        marker = ""
+        tags: tuple[str, ...] = ()
+        if state == "dragging":
+            marker = "[DRAG]"
+            tags = ("dragging",)
+        elif state == "drop-target":
+            marker = "[DROP HERE]"
+            tags = ("drop-target",)
+        elif state == "moved":
+            marker = "[MOVED]"
+            tags = ("moved",)
+
+        self.preview_tree.item(
+            item_id,
+            text=self.preview_item_text(song, output_name, marker),
+            tags=tags,
+        )
+
+    def flash_preview_moved_items(self, item_ids: list[str]) -> None:
+        for item_id in item_ids:
+            self.mark_preview_drag_state(item_id, "moved")
+        self.root.after(
+            800,
+            lambda: [self.mark_preview_drag_state(item_id, None) for item_id in item_ids],
+        )
+
+    def sync_preview_order_from_tree(self, moved_item_ids: list[str] | None = None) -> None:
+        ordered: list[Song] = []
+        for item_id in self.preview_tree.get_children(""):
+            if item_id in self.preview_tree_items:
+                ordered.append(self.preview_tree_items[item_id])
+                continue
+            for child_id in self.preview_tree.get_children(item_id):
+                song = self.preview_tree_items.get(child_id)
+                if song:
+                    ordered.append(song)
+
+        if not ordered:
+            return
+
+        self.selected_songs = ordered
+        self.custom_preview_order = [self.song_key(song) for song in ordered]
+        self.reset_timestamp_box()
+        self.update_preview_tree(self.selected_songs)
+        if moved_item_ids:
+            moved_keys = {
+                self.song_key(song)
+                for item_id in moved_item_ids
+                if (song := self.preview_tree_items.get(item_id))
+            }
+            flash_ids = [
+                item_id
+                for item_id, song in self.preview_tree_items.items()
+                if self.song_key(song) in moved_keys
+            ]
+            self.flash_preview_moved_items(flash_ids)
+        self.status_text.set("Urutan preview diperbarui. Generate akan mengikuti urutan ini.")
 
     def reset_timestamp_box(self) -> None:
         self.timestamp_text = ""
