@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import random
 import shutil
+import subprocess
 import threading
 import webbrowser
 from dataclasses import dataclass
@@ -13,6 +14,7 @@ from tkinter import (
     Scale,
     Spinbox,
     StringVar,
+    Text,
     Tk,
     filedialog,
     messagebox,
@@ -27,6 +29,14 @@ except Exception:
     DND_FILES = None
     TkinterDnD = None
     DND_AVAILABLE = False
+
+try:
+    from tinytag import TinyTag
+
+    TINYTAG_AVAILABLE = True
+except Exception:
+    TinyTag = None
+    TINYTAG_AVAILABLE = False
 
 
 AUDIO_EXTENSIONS = {
@@ -81,7 +91,7 @@ FILE_TYPES = {
 
 SUPPORTED_EXTENSIONS = set().union(*(extensions for _, extensions in FILE_TYPES.values()))
 
-APP_VERSION = "1.0.1"
+APP_VERSION = "1.1.0"
 REPO_URL = "https://github.com/renaldyakb/playlist-generator-tools"
 LATEST_RELEASE_URL = f"{REPO_URL}/releases/latest"
 
@@ -125,6 +135,7 @@ class PlaylistGeneratorApp:
         self.count_sliders: dict[str, Scale] = {}
         self.count_spinboxes: dict[str, Spinbox] = {}
         self.song_tree_items: dict[str, Song] = {}
+        self.timestamp_text = ""
         self.dropped_paths: list[Path] = []
         self.songs: list[Song] = []
         self.selected_songs: list[Song] = []
@@ -271,6 +282,15 @@ class PlaylistGeneratorApp:
             "File.Treeview",
             background=[("selected", "#24705d")],
             foreground=[("selected", "#ffffff")],
+        )
+        style.configure(
+            "Disabled.TButton",
+            background="#d6ded9",
+            foreground="#7d8a84",
+            borderwidth=0,
+            focusthickness=0,
+            font=("Segoe UI", 10),
+            padding=(14, 8),
         )
         style.configure("TProgressbar", background="#24705d", troughcolor="#dfe7e3")
 
@@ -562,6 +582,51 @@ class PlaylistGeneratorApp:
         )
         preview_scrollbar.grid(row=0, column=1, sticky="ns")
         self.preview_tree.configure(yscrollcommand=preview_scrollbar.set)
+
+        timestamp_header = ttk.Frame(self.right_panel, style="Plain.TFrame")
+        timestamp_header.grid(row=6, column=0, sticky="ew", pady=(16, 8))
+        timestamp_header.columnconfigure(0, weight=1)
+        ttk.Label(
+            timestamp_header,
+            text="Timestamp YouTube",
+            style="PanelTitle.TLabel",
+        ).grid(row=0, column=0, sticky="w")
+        self.copy_timestamp_button = ttk.Button(
+            timestamp_header,
+            text="Copy Timestamp",
+            style="Secondary.TButton",
+            command=self.copy_timestamp_to_clipboard,
+            state="disabled",
+        )
+        self.copy_timestamp_button.grid(row=0, column=1, sticky="e")
+
+        timestamp_frame = Frame(self.right_panel, bg="#ffffff")
+        timestamp_frame.grid(row=7, column=0, sticky="ew")
+        timestamp_frame.columnconfigure(0, weight=1)
+
+        self.timestamp_box = Text(
+            timestamp_frame,
+            height=8,
+            wrap="none",
+            borderwidth=0,
+            highlightthickness=1,
+            highlightcolor="#ccd8d2",
+            highlightbackground="#ccd8d2",
+            bg="#f8faf9",
+            fg="#16211d",
+            font=("Consolas", 9),
+        )
+        self.timestamp_box.grid(row=0, column=0, sticky="ew")
+        self.timestamp_box.configure(state="disabled")
+
+        timestamp_scrollbar = ttk.Scrollbar(
+            timestamp_frame,
+            orient="vertical",
+            command=self.timestamp_box.yview,
+        )
+        timestamp_scrollbar.grid(row=0, column=1, sticky="ns")
+        self.timestamp_box.configure(yscrollcommand=timestamp_scrollbar.set)
+        self.set_timestamp_text("Timestamp akan dibuat setelah Generate & Copy berhasil.")
 
     def _build_empty_state(self) -> None:
         self.empty_panel = ttk.Frame(self.container, style="Panel.TFrame", padding=34)
@@ -867,6 +932,7 @@ class PlaylistGeneratorApp:
         grouped = self.songs_by_category()
         quotas = self.desired_counts()
         total_count = sum(quotas.values())
+        self.reset_timestamp_box()
 
         if mode == "manual":
             picked_by_type = {key: 0 for key in FILE_TYPES}
@@ -963,6 +1029,118 @@ class PlaylistGeneratorApp:
             for index, (_song, target) in enumerate(plan):
                 self.preview_tree.insert("", "end", iid=f"preview_file_{index}", text=target.name)
 
+    def reset_timestamp_box(self) -> None:
+        self.timestamp_text = ""
+        self.set_timestamp_text("Timestamp akan dibuat setelah Generate & Copy berhasil.")
+        self.copy_timestamp_button.configure(state="disabled")
+
+    def set_timestamp_text(self, text: str) -> None:
+        self.timestamp_box.configure(state="normal")
+        self.timestamp_box.delete("1.0", "end")
+        self.timestamp_box.insert("1.0", text)
+        self.timestamp_box.configure(state="disabled")
+
+    def copy_timestamp_to_clipboard(self) -> None:
+        if not self.timestamp_text.strip():
+            messagebox.showinfo("Timestamp belum tersedia", "Generate file terlebih dahulu.")
+            return
+        self.root.clipboard_clear()
+        self.root.clipboard_append(self.timestamp_text)
+        self.status_text.set("Timestamp berhasil dicopy ke clipboard.")
+
+    def build_timestamp_text(self, songs: list[Song]) -> str:
+        sections = []
+        missing_duration: list[str] = []
+
+        for category, title in (("music", "Audio"), ("video", "Video")):
+            media_files = [song for song in songs if song.category == category]
+            if not media_files:
+                continue
+
+            lines = [f"{title} Timestamp"]
+            elapsed = 0.0
+            for song in media_files:
+                lines.append(f"[{self.format_timestamp(elapsed)}] - {song.path.stem}")
+                duration = self.read_media_duration(song.path)
+                if duration is None:
+                    missing_duration.append(song.name)
+                    continue
+                elapsed += duration
+            sections.append("\n".join(lines))
+
+        if missing_duration:
+            sections.append(
+                "Durasi tidak terbaca\n"
+                + "\n".join(f"- {name}" for name in missing_duration)
+            )
+
+        return "\n\n".join(sections) if sections else "Tidak ada file audio atau video pada output ini."
+
+    def read_media_duration(self, path: Path) -> float | None:
+        duration = self.read_duration_with_ffprobe(path)
+        if duration is not None:
+            return duration
+        return self.read_duration_with_tinytag(path)
+
+    @staticmethod
+    def read_duration_with_ffprobe(path: Path) -> float | None:
+        command = [
+            "ffprobe",
+            "-v",
+            "error",
+            "-show_entries",
+            "format=duration",
+            "-of",
+            "default=noprint_wrappers=1:nokey=1",
+            str(path),
+        ]
+        startupinfo = None
+        creationflags = 0
+        if hasattr(subprocess, "STARTUPINFO"):
+            startupinfo = subprocess.STARTUPINFO()
+            startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+        if hasattr(subprocess, "CREATE_NO_WINDOW"):
+            creationflags = subprocess.CREATE_NO_WINDOW
+
+        try:
+            result = subprocess.run(
+                command,
+                capture_output=True,
+                text=True,
+                timeout=8,
+                startupinfo=startupinfo,
+                creationflags=creationflags,
+                check=False,
+            )
+        except Exception:
+            return None
+
+        if result.returncode != 0:
+            return None
+        try:
+            duration = float(result.stdout.strip())
+        except ValueError:
+            return None
+        return duration if duration > 0 else None
+
+    @staticmethod
+    def read_duration_with_tinytag(path: Path) -> float | None:
+        if not TINYTAG_AVAILABLE or TinyTag is None:
+            return None
+        try:
+            duration = TinyTag.get(str(path)).duration
+        except Exception:
+            return None
+        return duration if duration and duration > 0 else None
+
+    @staticmethod
+    def format_timestamp(seconds: float) -> str:
+        total_seconds = max(0, int(round(seconds)))
+        hours = total_seconds // 3600
+        minutes = (total_seconds % 3600) // 60
+        secs = total_seconds % 60
+        return f"{hours:02d}:{minutes:02d}:{secs:02d}"
+
     def generate_playlist(self) -> None:
         if len(self.selected_songs) != self.get_total_count():
             self.update_selection_preview()
@@ -1024,6 +1202,14 @@ class PlaylistGeneratorApp:
                     f"{copied}/{total}",
                 )
 
+            timestamp_text = self.build_timestamp_text(songs)
+            has_timestamp_media = any(song.category in {"music", "video"} for song in songs)
+            self.root.after(
+                0,
+                self.apply_generated_timestamp,
+                timestamp_text,
+                has_timestamp_media,
+            )
             self.root.after(
                 0,
                 self.status_text.set,
@@ -1040,6 +1226,11 @@ class PlaylistGeneratorApp:
             self.root.after(0, self.status_text.set, "Proses gagal. Cek folder dan izin file.")
         finally:
             self.root.after(1200, self.progress_text.set, "")
+
+    def apply_generated_timestamp(self, text: str, can_copy: bool) -> None:
+        self.timestamp_text = text if can_copy else ""
+        self.set_timestamp_text(text)
+        self.copy_timestamp_button.configure(state="normal" if can_copy else "disabled")
 
     def success_message(self, copied: int, songs: list[Song], destination: Path) -> str:
         categories = self.selected_categories(songs)

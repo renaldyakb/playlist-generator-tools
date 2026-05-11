@@ -87,6 +87,7 @@ echo Membuild Playlist Generator...
     --windowed ^
     --name PlaylistGenerator ^
     --collect-all tkinterdnd2 ^
+    --collect-all tinytag ^
     "%~dp0playlist_generator.py"
 
 if not %errorlevel%==0 (

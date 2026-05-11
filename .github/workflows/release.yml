@@ -29,7 +29,7 @@ jobs:
 
       - name: Build executable
         run: |
-          python -m PyInstaller --onefile --windowed --name PlaylistGenerator --collect-all tkinterdnd2 playlist_generator.py
+          python -m PyInstaller --onefile --windowed --name PlaylistGenerator --collect-all tkinterdnd2 --collect-all tinytag playlist_generator.py
 
       - name: Publish release
         uses: softprops/action-gh-release@v2
@@ -40,6 +40,7 @@ jobs:
 
             Fitur:
             - Tombol GitHub, Star Repo, dan Latest Release di header aplikasi.
+            - Timestamp YouTube untuk file audio dan video.
             - Dukungan musik, gambar, video, dan PDF.
             - Filter dan jumlah file per jenis.
             - Preview tree per jenis file.

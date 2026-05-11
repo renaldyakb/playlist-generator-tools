@@ -25,6 +25,8 @@ Aplikasi GUI ringan untuk memilih file dari folder atau drag & drop, membuat kum
   - Pilih manual dari daftar
 - Copy file terpilih ke folder tujuan.
 - Preview file ditampilkan dalam bentuk tree per jenis file.
+- Timestamp YouTube otomatis untuk file audio dan video, dipisah per kategori.
+- Tombol copy timestamp setelah generate berhasil.
 - Jika output berisi lebih dari satu jenis file, aplikasi otomatis membuat subfolder seperti `Musik`, `Gambar`, `Video`, dan `PDF`.
 - Jika output hanya berisi satu jenis file, file langsung dicopy ke folder tujuan tanpa subfolder tambahan.
 - Prefix urutan otomatis: `01.`, `02.`, `03.`, dan seterusnya.
@@ -67,6 +69,8 @@ Di beberapa sistem, perintahnya bisa:
 python3 playlist_generator.py
 ```
 
+Catatan timestamp: aplikasi akan mencoba membaca durasi audio/video dengan `ffprobe` jika tersedia, lalu fallback ke dependency ringan `tinytag`. Beberapa format video tertentu mungkin membutuhkan `ffprobe` agar durasinya terbaca akurat.
+
 ## Build Menjadi Executable
 
 ### Windows
@@ -105,7 +109,7 @@ Opsional, jika ingin build sendiri:
 ```bash
 pip install pyinstaller
 pip install -r requirements.txt
-pyinstaller --onefile --windowed --name PlaylistGenerator --collect-all tkinterdnd2 playlist_generator.py
+pyinstaller --onefile --windowed --name PlaylistGenerator --collect-all tkinterdnd2 --collect-all tinytag playlist_generator.py
 ```
 
 Hasil build akan ada di folder `dist`.

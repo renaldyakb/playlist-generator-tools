@@ -86,6 +86,7 @@ printf '\n%s\n' "Membuild Playlist Generator..."
     --windowed \
     --name "$APP_NAME" \
     --collect-all tkinterdnd2 \
+    --collect-all tinytag \
     "$APP_DIR/playlist_generator.py"
 
 if [ $? -ne 0 ]; then
