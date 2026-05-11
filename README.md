@@ -63,13 +63,45 @@ python3 playlist_generator.py
 
 ## Build Menjadi Executable
 
-Opsional, jika ingin file aplikasi standalone:
+### Windows
+
+Jalankan:
+
+```text
+build_windows.bat
+```
+
+Hasil build:
+
+```text
+dist\PlaylistGenerator.exe
+```
+
+### macOS / Linux
+
+Jalankan:
+
+```bash
+chmod +x build_unix.sh
+./build_unix.sh
+```
+
+Hasil build:
+
+```text
+dist/PlaylistGenerator
+```
+
+### Manual
+
+Opsional, jika ingin build sendiri:
 
 ```bash
 pip install pyinstaller
-pyinstaller --onefile --windowed --name PlaylistGenerator playlist_generator.py
+pip install -r requirements.txt
+pyinstaller --onefile --windowed --name PlaylistGenerator --collect-all tkinterdnd2 playlist_generator.py
 ```
 
 Hasil build akan ada di folder `dist`.
 
-Catatan: executable sebaiknya dibuild di OS target masing-masing. Build di Windows untuk `.exe`, build di macOS untuk aplikasi macOS, dan build di Linux untuk binary Linux.
+Catatan: executable harus dibuild di OS target masing-masing. Build di Windows untuk `.exe`, build di macOS untuk aplikasi macOS, dan build di Linux untuk binary Linux.
