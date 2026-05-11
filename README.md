@@ -81,7 +81,7 @@ Jalankan:
 build_windows.bat
 ```
 
-Hasil build:
+Hasil build Windows:
 
 ```text
 dist\PlaylistGenerator.exe
@@ -96,7 +96,7 @@ chmod +x build_unix.sh
 ./build_unix.sh
 ```
 
-Hasil build:
+Hasil build macOS/Linux:
 
 ```text
 dist/PlaylistGenerator
@@ -118,7 +118,7 @@ Catatan: executable harus dibuild di OS target masing-masing. Build di Windows u
 
 ## Release GitHub
 
-Release Windows otomatis dibuat oleh GitHub Actions saat tag versi baru dipush, misalnya:
+Release Windows, Linux, dan macOS otomatis dibuat oleh GitHub Actions saat tag versi baru dipush, misalnya:
 
 ```bash
 git tag v1.0.1

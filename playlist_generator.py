@@ -99,7 +99,7 @@ FILE_TYPES = {
 
 SUPPORTED_EXTENSIONS = set().union(*(extensions for _, extensions in FILE_TYPES.values()))
 
-APP_VERSION = "1.1.2"
+APP_VERSION = "1.1.3"
 REPO_URL = "https://github.com/renaldyakb/playlist-generator-tools"
 LATEST_RELEASE_URL = f"{REPO_URL}/releases/latest"
 
