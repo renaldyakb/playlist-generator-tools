@@ -1,5 +1,10 @@
 # Playlist Generator
 
+[![GitHub stars](https://img.shields.io/github/stars/renaldyakb/playlist-generator-tools?style=for-the-badge&logo=github&color=24705d)](https://github.com/renaldyakb/playlist-generator-tools/stargazers)
+[![Total downloads](https://img.shields.io/github/downloads/renaldyakb/playlist-generator-tools/total?style=for-the-badge&logo=github&color=24705d)](https://github.com/renaldyakb/playlist-generator-tools/releases)
+[![Latest release](https://img.shields.io/github/v/release/renaldyakb/playlist-generator-tools?style=for-the-badge&logo=github&color=24705d)](https://github.com/renaldyakb/playlist-generator-tools/releases/latest)
+[![Windows build](https://img.shields.io/github/actions/workflow/status/renaldyakb/playlist-generator-tools/release.yml?branch=main&style=for-the-badge&logo=githubactions&label=build)](https://github.com/renaldyakb/playlist-generator-tools/actions/workflows/release.yml)
+
 Aplikasi GUI ringan untuk memilih file dari folder atau drag & drop, membuat kumpulan file secara random/manual/urut nama file, lalu meng-copy file ke folder tujuan dengan prefix nomor urut seperti `01.nama-file.mp3`.
 
 ## Fitur
