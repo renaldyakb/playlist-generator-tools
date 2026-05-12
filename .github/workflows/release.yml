@@ -105,6 +105,8 @@ jobs:
             - macOS: PlaylistGenerator-macOS.zip atau PlaylistGenerator-macOS
 
             Fitur:
+            - Multi-folder dan multi-file source: tambah beberapa folder/file lalu gabungkan sebelum generate.
+            - Daftar sumber file dengan tombol hapus pilihan dan hapus semua.
             - Notifikasi update otomatis dari GitHub saat ada release baru.
             - Tombol Cek Update di header aplikasi.
             - Lock urutan file pada Preview Output.

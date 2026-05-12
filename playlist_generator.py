@@ -102,7 +102,7 @@ FILE_TYPES = {
 
 SUPPORTED_EXTENSIONS = set().union(*(extensions for _, extensions in FILE_TYPES.values()))
 
-APP_VERSION = "1.1.4"
+APP_VERSION = "1.1.5"
 REPO_URL = "https://github.com/renaldyakb/playlist-generator-tools"
 LATEST_RELEASE_URL = f"{REPO_URL}/releases/latest"
 LATEST_RELEASE_API_URL = (
@@ -157,6 +157,7 @@ class PlaylistGeneratorApp:
         self.update_check_in_progress = False
         self.update_notified_tag: str | None = None
         self.timestamp_text = ""
+        self.source_paths: list[Path] = []
         self.dropped_paths: list[Path] = []
         self.songs: list[Song] = []
         self.selected_songs: list[Song] = []
@@ -554,6 +555,7 @@ class PlaylistGeneratorApp:
             textvariable=self.source_folder,
             style="Field.TEntry",
             font=("Segoe UI", 9),
+            state="readonly",
         )
         source_entry.grid(row=0, column=0, sticky="ew", padx=(0, 10))
         ttk.Button(
@@ -563,19 +565,72 @@ class PlaylistGeneratorApp:
             command=self.choose_source_folder,
         ).grid(row=0, column=1, sticky="e")
 
+        source_actions = ttk.Frame(self.left_panel, style="Plain.TFrame")
+        source_actions.grid(row=2, column=0, sticky="ew", pady=(0, 10))
+        source_actions.columnconfigure(0, weight=1)
+        source_actions.columnconfigure(1, weight=1)
+        ttk.Button(
+            source_actions,
+            text="Tambah Folder",
+            style="Secondary.TButton",
+            command=self.add_source_folder,
+        ).grid(row=0, column=0, sticky="ew", padx=(0, 6))
+        ttk.Button(
+            source_actions,
+            text="Tambah File",
+            style="Secondary.TButton",
+            command=self.add_source_files,
+        ).grid(row=0, column=1, sticky="ew", padx=(6, 0))
+
+        source_list_frame = Frame(self.left_panel, bg="#ffffff")
+        source_list_frame.grid(row=3, column=0, sticky="ew", pady=(0, 10))
+        source_list_frame.columnconfigure(0, weight=1)
+        self.source_tree = ttk.Treeview(
+            source_list_frame,
+            show="tree",
+            height=4,
+            selectmode="extended",
+            style="File.Treeview",
+        )
+        self.source_tree.grid(row=0, column=0, sticky="ew")
+        source_scrollbar = ttk.Scrollbar(
+            source_list_frame,
+            orient="vertical",
+            command=self.source_tree.yview,
+        )
+        source_scrollbar.grid(row=0, column=1, sticky="ns")
+        self.source_tree.configure(yscrollcommand=source_scrollbar.set)
+
+        source_manage = ttk.Frame(self.left_panel, style="Plain.TFrame")
+        source_manage.grid(row=4, column=0, sticky="ew", pady=(0, 16))
+        source_manage.columnconfigure(0, weight=1)
+        source_manage.columnconfigure(1, weight=1)
+        ttk.Button(
+            source_manage,
+            text="Hapus Pilihan",
+            style="Secondary.TButton",
+            command=self.remove_selected_sources,
+        ).grid(row=0, column=0, sticky="ew", padx=(0, 6))
+        ttk.Button(
+            source_manage,
+            text="Hapus Semua",
+            style="Secondary.TButton",
+            command=self.clear_sources,
+        ).grid(row=0, column=1, sticky="ew", padx=(6, 0))
+
         ttk.Checkbutton(
             self.left_panel,
             text="Scan subfolder juga",
             variable=self.recursive_scan,
             command=self.refresh_songs,
             style="Clean.TCheckbutton",
-        ).grid(row=2, column=0, sticky="w", pady=(0, 20))
+        ).grid(row=5, column=0, sticky="w", pady=(0, 20))
 
         ttk.Label(self.left_panel, text="Jenis & Jumlah File", style="PanelTitle.TLabel").grid(
-            row=3, column=0, sticky="w"
+            row=6, column=0, sticky="w"
         )
         filter_box = ttk.Frame(self.left_panel, style="Plain.TFrame")
-        filter_box.grid(row=4, column=0, sticky="ew", pady=(10, 12))
+        filter_box.grid(row=7, column=0, sticky="ew", pady=(10, 12))
         filter_box.columnconfigure(1, weight=1)
         for index, (key, (label, _extensions)) in enumerate(FILE_TYPES.items()):
             ttk.Checkbutton(
@@ -624,14 +679,14 @@ class PlaylistGeneratorApp:
             self.count_spinboxes[key] = spinbox
 
         ttk.Label(self.left_panel, textvariable=self.counts_text, style="Muted.TLabel").grid(
-            row=5, column=0, sticky="w", pady=(0, 18)
+            row=8, column=0, sticky="w", pady=(0, 18)
         )
 
         ttk.Label(self.left_panel, text="Cara Memilih", style="PanelTitle.TLabel").grid(
-            row=6, column=0, sticky="w"
+            row=9, column=0, sticky="w"
         )
         mode_box = ttk.Frame(self.left_panel, style="Plain.TFrame")
-        mode_box.grid(row=7, column=0, sticky="ew", pady=(10, 20))
+        mode_box.grid(row=10, column=0, sticky="ew", pady=(10, 20))
         for index, (label, value) in enumerate(
             [
                 ("Random", "random"),
@@ -649,10 +704,10 @@ class PlaylistGeneratorApp:
             ).grid(row=index, column=0, sticky="w", pady=3)
 
         ttk.Label(self.left_panel, text="Folder Tujuan", style="PanelTitle.TLabel").grid(
-            row=8, column=0, sticky="w"
+            row=11, column=0, sticky="w"
         )
         destination_row = ttk.Frame(self.left_panel, style="Plain.TFrame")
-        destination_row.grid(row=9, column=0, sticky="ew", pady=(10, 20))
+        destination_row.grid(row=12, column=0, sticky="ew", pady=(10, 20))
         destination_row.columnconfigure(0, weight=1)
         destination_entry = ttk.Entry(
             destination_row,
@@ -669,7 +724,7 @@ class PlaylistGeneratorApp:
         ).grid(row=0, column=1, sticky="e")
 
         action_row = ttk.Frame(self.left_panel, style="Plain.TFrame")
-        action_row.grid(row=10, column=0, sticky="ew")
+        action_row.grid(row=13, column=0, sticky="ew")
         action_row.columnconfigure(0, weight=1)
         ttk.Button(
             action_row,
@@ -677,6 +732,11 @@ class PlaylistGeneratorApp:
             style="Primary.TButton",
             command=self.generate_playlist,
         ).grid(row=0, column=0, sticky="ew")
+
+        if DND_AVAILABLE:
+            self.register_drop_target(source_row)
+            self.register_drop_target(source_list_frame)
+            self.register_drop_target(self.source_tree)
 
     def _build_song_view(self) -> None:
         title_row = ttk.Frame(self.right_panel, style="Plain.TFrame")
@@ -893,9 +953,12 @@ class PlaylistGeneratorApp:
     def choose_source_folder(self) -> None:
         folder = filedialog.askdirectory(title="Pilih folder yang berisi file")
         if folder:
-            self.dropped_paths = []
-            self.source_folder.set(folder)
-            self.refresh_songs()
+            self.set_source_paths([Path(folder)], replace=True)
+
+    def add_source_folder(self) -> None:
+        folder = filedialog.askdirectory(title="Tambah folder sumber")
+        if folder:
+            self.set_source_paths([Path(folder)], replace=False)
 
     def choose_source_files(self) -> None:
         files = filedialog.askopenfilenames(
@@ -906,9 +969,18 @@ class PlaylistGeneratorApp:
             ],
         )
         if files:
-            self.dropped_paths = [Path(file) for file in files]
-            self.source_folder.set(f"{len(self.dropped_paths)} file dipilih")
-            self.refresh_songs()
+            self.set_source_paths([Path(file) for file in files], replace=True)
+
+    def add_source_files(self) -> None:
+        files = filedialog.askopenfilenames(
+            title="Tambah file sumber",
+            filetypes=[
+                ("File yang didukung", self.supported_filetype_pattern()),
+                ("Semua file", "*.*"),
+            ],
+        )
+        if files:
+            self.set_source_paths([Path(file) for file in files], replace=False)
 
     def choose_destination_folder(self) -> None:
         folder = filedialog.askdirectory(title="Pilih folder tujuan playlist")
@@ -927,16 +999,99 @@ class PlaylistGeneratorApp:
         if not paths:
             return
 
-        self.dropped_paths = paths
-        if len(paths) == 1 and paths[0].is_dir():
-            self.source_folder.set(str(paths[0]))
-            self.dropped_paths = []
-        else:
-            self.source_folder.set(f"{len(paths)} item dipilih via drag & drop")
+        self.set_source_paths(paths, replace=not self.source_paths)
+
+    def set_source_paths(self, paths: list[Path], replace: bool) -> None:
+        current = [] if replace else self.source_paths.copy()
+        current.extend(paths)
+
+        unique_paths: list[Path] = []
+        seen: set[str] = set()
+        for path in current:
+            key = str(path.resolve()) if path.exists() else str(path)
+            if key in seen:
+                continue
+            seen.add(key)
+            unique_paths.append(path)
+
+        self.source_paths = unique_paths
+        self.dropped_paths = unique_paths
+        self.update_source_summary()
         self.refresh_songs()
 
+    def update_source_summary(self) -> None:
+        if not self.source_paths:
+            self.source_folder.set("")
+        elif len(self.source_paths) == 1:
+            self.source_folder.set(str(self.source_paths[0]))
+        else:
+            folder_count = sum(1 for path in self.source_paths if path.is_dir())
+            file_count = sum(1 for path in self.source_paths if path.is_file())
+            parts = []
+            if folder_count:
+                parts.append(f"{folder_count} folder")
+            if file_count:
+                parts.append(f"{file_count} file")
+            self.source_folder.set(" + ".join(parts) + " dipilih")
+
+        self.update_source_tree()
+
+    def update_source_tree(self) -> None:
+        if not hasattr(self, "source_tree"):
+            return
+
+        self.source_tree.delete(*self.source_tree.get_children())
+        for index, path in enumerate(self.source_paths):
+            label = "Folder" if path.is_dir() else "File" if path.is_file() else "Tidak valid"
+            self.source_tree.insert(
+                "",
+                "end",
+                iid=f"source_path_{index}",
+                text=f"{label}: {path}",
+            )
+
+    def remove_selected_sources(self) -> None:
+        selected_indexes = sorted(
+            (
+                int(item_id.replace("source_path_", ""))
+                for item_id in self.source_tree.selection()
+                if item_id.startswith("source_path_")
+            ),
+            reverse=True,
+        )
+        if not selected_indexes:
+            self.status_text.set("Pilih sumber yang ingin dihapus dari daftar.")
+            return
+
+        for index in selected_indexes:
+            if 0 <= index < len(self.source_paths):
+                self.source_paths.pop(index)
+
+        self.dropped_paths = self.source_paths.copy()
+        self.update_source_summary()
+        self.refresh_songs()
+
+    def clear_sources(self) -> None:
+        if not self.source_paths:
+            self.status_text.set("Belum ada sumber file yang dipilih.")
+            return
+
+        self.source_paths = []
+        self.dropped_paths = []
+        self.songs = []
+        self.selected_songs = []
+        self.locked_preview_keys.clear()
+        self.custom_preview_order.clear()
+        self.update_source_summary()
+        self.update_song_list()
+        self.update_counts()
+        self.update_preview_tree([])
+        self.reset_timestamp_box()
+        self.update_source_view()
+        self.status_text.set("Semua sumber file sudah dihapus.")
+
     def update_source_view(self) -> None:
-        has_source = bool(self.source_folder.get().strip() or self.dropped_paths)
+        has_source = bool(self.source_paths)
         if has_source:
             self.empty_panel.grid_remove()
             self.left_panel.grid()
@@ -972,21 +1127,18 @@ class PlaylistGeneratorApp:
         ]
 
     def refresh_songs(self) -> None:
-        if self.dropped_paths:
-            files = []
-            for path in self.dropped_paths:
-                files.extend(self.collect_files_from_path(path))
-        else:
-            source_text = self.source_folder.get().strip()
-            source = Path(source_text) if source_text else None
-            if not source or not source.exists() or not source.is_dir():
-                self.songs = []
-                self.update_song_list()
-                self.update_counts()
-                self.update_source_view()
-                self.status_text.set("Pilih folder atau file yang valid.")
-                return
-            files = self.collect_files_from_path(source)
+        files = []
+        valid_sources = [path for path in self.source_paths if path.exists()]
+        for path in valid_sources:
+            files.extend(self.collect_files_from_path(path))
+
+        if not self.source_paths or not valid_sources:
+            self.songs = []
+            self.update_song_list()
+            self.update_counts()
+            self.update_source_view()
+            self.status_text.set("Pilih folder atau file yang valid.")
+            return
 
         if not files:
             self.songs = []
@@ -1012,7 +1164,9 @@ class PlaylistGeneratorApp:
         self.sync_count_controls(default_if_empty=True)
         self.update_selection_preview()
         self.update_source_view()
-        self.status_text.set(f"Ditemukan {len(self.songs)} file yang didukung.")
+        self.status_text.set(
+            f"Ditemukan {len(self.songs)} file yang didukung dari {len(valid_sources)} sumber."
+        )
 
     def update_song_list(self) -> None:
         self.song_tree.delete(*self.song_tree.get_children())
