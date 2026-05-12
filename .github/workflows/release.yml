@@ -105,6 +105,10 @@ jobs:
             - macOS: PlaylistGenerator-macOS.zip atau PlaylistGenerator-macOS
 
             Fitur:
+            - Sidebar setting responsif dengan scroll dan tombol Generate & Copy tetap terlihat.
+            - Dialog folder tujuan selalu muncul saat Generate & Copy agar user memilih output baru.
+            - Timestamp YouTube tampil otomatis dari Preview Output sebelum generate.
+            - Pembacaan durasi video MP4/MOV/M4V/3GP lebih kuat tanpa wajib FFmpeg.
             - Multi-folder dan multi-file source: tambah beberapa folder/file lalu gabungkan sebelum generate.
             - Daftar sumber file dengan tombol hapus pilihan dan hapus semua.
             - Notifikasi update otomatis dari GitHub saat ada release baru.

@@ -12,6 +12,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from tkinter import (
     BooleanVar,
+    Canvas,
     Frame,
     IntVar,
     Scale,
@@ -91,6 +92,8 @@ VIDEO_EXTENSIONS = {
     ".wmv",
 }
 
+ISO_VIDEO_EXTENSIONS = {".3gp", ".m4v", ".mov", ".mp4"}
+
 PDF_EXTENSIONS = {".pdf"}
 
 FILE_TYPES = {
@@ -102,7 +105,7 @@ FILE_TYPES = {
 
 SUPPORTED_EXTENSIONS = set().union(*(extensions for _, extensions in FILE_TYPES.values()))
 
-APP_VERSION = "1.1.5"
+APP_VERSION = "1.1.6"
 REPO_URL = "https://github.com/renaldyakb/playlist-generator-tools"
 LATEST_RELEASE_URL = f"{REPO_URL}/releases/latest"
 LATEST_RELEASE_API_URL = (
@@ -129,7 +132,7 @@ class PlaylistGeneratorApp:
         self.root = TkinterDnD.Tk() if DND_AVAILABLE and TkinterDnD else Tk()
         self.root.title("Playlist Generator")
         self.root.minsize(1080, 720)
-        self.root.configure(bg="#f3f6f4")
+        self.root.configure(bg="#eef3f7")
 
         self.source_folder = StringVar()
         self.destination_folder = StringVar()
@@ -156,6 +159,8 @@ class PlaylistGeneratorApp:
         self.preview_drop_target: str | None = None
         self.update_check_in_progress = False
         self.update_notified_tag: str | None = None
+        self.timestamp_preview_revision = 0
+        self.timestamp_preview_after_id: str | None = None
         self.timestamp_text = ""
         self.source_paths: list[Path] = []
         self.dropped_paths: list[Path] = []
@@ -307,12 +312,12 @@ class PlaylistGeneratorApp:
 
         style.configure(
             "App.TFrame",
-            background="#f3f6f4",
+            background="#eef3f7",
         )
         style.configure(
             "Panel.TFrame",
             background="#ffffff",
-            bordercolor="#dce4df",
+            bordercolor="#d7e2ea",
             borderwidth=1,
             relief="solid",
         )
@@ -324,20 +329,20 @@ class PlaylistGeneratorApp:
         )
         style.configure(
             "Header.TLabel",
-            background="#f3f6f4",
-            foreground="#16211d",
+            background="#eef3f7",
+            foreground="#101820",
             font=("Segoe UI", 24, "bold"),
         )
         style.configure(
             "Subheader.TLabel",
-            background="#f3f6f4",
-            foreground="#52605a",
+            background="#eef3f7",
+            foreground="#50616b",
             font=("Segoe UI", 10),
         )
         style.configure(
             "PanelTitle.TLabel",
             background="#ffffff",
-            foreground="#16211d",
+            foreground="#101820",
             font=("Segoe UI", 12, "bold"),
         )
         style.configure(
@@ -354,50 +359,50 @@ class PlaylistGeneratorApp:
         )
         style.configure(
             "Primary.TButton",
-            background="#24705d",
+            background="#0f766e",
             foreground="#ffffff",
             borderwidth=0,
             focusthickness=0,
             font=("Segoe UI", 10, "bold"),
-            padding=(16, 10),
+            padding=(16, 11),
         )
         style.map(
             "Primary.TButton",
-            background=[("active", "#1c5b4b"), ("disabled", "#9eb7b1")],
+            background=[("active", "#115e59"), ("disabled", "#9fb8b2")],
             foreground=[("disabled", "#eef4f2")],
         )
         style.configure(
             "Secondary.TButton",
-            background="#e8efeb",
-            foreground="#16211d",
+            background="#edf3f6",
+            foreground="#101820",
             borderwidth=0,
             focusthickness=0,
             font=("Segoe UI", 10),
             padding=(14, 8),
         )
-        style.map("Secondary.TButton", background=[("active", "#dbe6e0")])
+        style.map("Secondary.TButton", background=[("active", "#e0eaf0")])
         style.configure(
             "Link.TButton",
-            background="#f3f6f4",
-            foreground="#24705d",
+            background="#eef3f7",
+            foreground="#0f766e",
             borderwidth=0,
             focusthickness=0,
             font=("Segoe UI", 9, "bold"),
             padding=(10, 6),
         )
-        style.map("Link.TButton", background=[("active", "#e7efeb")])
+        style.map("Link.TButton", background=[("active", "#dde8ee")])
         style.configure(
             "Field.TEntry",
-            fieldbackground="#f8faf9",
-            background="#f8faf9",
-            foreground="#16211d",
-            bordercolor="#ccd8d2",
-            lightcolor="#ccd8d2",
-            darkcolor="#ccd8d2",
-            insertcolor="#16211d",
+            fieldbackground="#fbfdfe",
+            background="#fbfdfe",
+            foreground="#101820",
+            bordercolor="#cfdae2",
+            lightcolor="#cfdae2",
+            darkcolor="#cfdae2",
+            insertcolor="#101820",
             padding=(10, 8),
         )
-        style.map("Field.TEntry", bordercolor=[("focus", "#24705d")])
+        style.map("Field.TEntry", bordercolor=[("focus", "#0f766e")])
         style.configure(
             "Clean.TCheckbutton",
             background="#ffffff",
@@ -416,38 +421,38 @@ class PlaylistGeneratorApp:
         style.map("Clean.TRadiobutton", background=[("active", "#ffffff")])
         style.configure(
             "File.Treeview",
-            background="#f8faf9",
-            fieldbackground="#f8faf9",
-            foreground="#16211d",
-            bordercolor="#ccd8d2",
+            background="#fbfdfe",
+            fieldbackground="#fbfdfe",
+            foreground="#101820",
+            bordercolor="#cfdae2",
             borderwidth=1,
-            rowheight=24,
+            rowheight=25,
             font=("Segoe UI", 10),
         )
         style.configure(
             "File.Treeview.Heading",
-            background="#eef4f1",
+            background="#edf3f6",
             foreground="#46534d",
             font=("Segoe UI", 9, "bold"),
         )
         style.map(
             "File.Treeview",
-            background=[("selected", "#24705d")],
+            background=[("selected", "#0f766e")],
             foreground=[("selected", "#ffffff")],
         )
         style.configure(
             "Drag.Treeview",
-            background="#eef7f4",
-            fieldbackground="#eef7f4",
-            foreground="#16211d",
-            bordercolor="#24705d",
+            background="#ecfdf8",
+            fieldbackground="#ecfdf8",
+            foreground="#101820",
+            bordercolor="#0f766e",
             borderwidth=1,
-            rowheight=24,
+            rowheight=25,
             font=("Segoe UI", 10),
         )
         style.map(
             "Drag.Treeview",
-            background=[("selected", "#24705d")],
+            background=[("selected", "#0f766e")],
             foreground=[("selected", "#ffffff")],
         )
         style.configure(
@@ -459,7 +464,7 @@ class PlaylistGeneratorApp:
             font=("Segoe UI", 10),
             padding=(14, 8),
         )
-        style.configure("TProgressbar", background="#24705d", troughcolor="#dfe7e3")
+        style.configure("TProgressbar", background="#0f766e", troughcolor="#dce6ec")
 
     def _build_layout(self) -> None:
         self.container = ttk.Frame(self.root, style="App.TFrame", padding=26)
@@ -518,6 +523,7 @@ class PlaylistGeneratorApp:
         self.left_panel = ttk.Frame(container, style="Panel.TFrame", padding=20)
         self.left_panel.grid(row=1, column=0, sticky="nsew", padx=(0, 18))
         self.left_panel.columnconfigure(0, weight=1)
+        self.left_panel.rowconfigure(0, weight=1)
 
         self.right_panel = ttk.Frame(container, style="Panel.TFrame", padding=20)
         self.right_panel.grid(row=1, column=1, sticky="nsew")
@@ -543,11 +549,57 @@ class PlaylistGeneratorApp:
         self.update_source_view()
 
     def _build_settings(self) -> None:
-        ttk.Label(self.left_panel, text="Sumber File", style="PanelTitle.TLabel").grid(
+        scroll_area = ttk.Frame(self.left_panel, style="Plain.TFrame")
+        scroll_area.grid(row=0, column=0, sticky="nsew")
+        scroll_area.columnconfigure(0, weight=1)
+        scroll_area.rowconfigure(0, weight=1)
+
+        self.settings_canvas = Canvas(
+            scroll_area,
+            bg="#ffffff",
+            highlightthickness=0,
+            borderwidth=0,
+        )
+        self.settings_canvas.grid(row=0, column=0, sticky="nsew")
+
+        settings_scrollbar = ttk.Scrollbar(
+            scroll_area,
+            orient="vertical",
+            command=self.settings_canvas.yview,
+        )
+        settings_scrollbar.grid(row=0, column=1, sticky="ns", padx=(8, 0))
+        self.settings_canvas.configure(yscrollcommand=settings_scrollbar.set)
+
+        settings_panel = ttk.Frame(self.settings_canvas, style="Plain.TFrame")
+        self.settings_window = self.settings_canvas.create_window(
+            (0, 0),
+            window=settings_panel,
+            anchor="nw",
+        )
+        settings_panel.columnconfigure(0, weight=1)
+
+        settings_panel.bind(
+            "<Configure>",
+            lambda _event: self.settings_canvas.configure(
+                scrollregion=self.settings_canvas.bbox("all")
+            ),
+        )
+        self.settings_canvas.bind(
+            "<Configure>",
+            lambda event: self.settings_canvas.itemconfigure(
+                self.settings_window,
+                width=event.width,
+            ),
+        )
+        self.settings_canvas.bind("<MouseWheel>", self.on_settings_mousewheel)
+        self.settings_canvas.bind("<Button-4>", self.on_settings_mousewheel)
+        self.settings_canvas.bind("<Button-5>", self.on_settings_mousewheel)
+
+        ttk.Label(settings_panel, text="Sumber File", style="PanelTitle.TLabel").grid(
             row=0, column=0, sticky="w"
         )
 
-        source_row = ttk.Frame(self.left_panel, style="Plain.TFrame")
+        source_row = ttk.Frame(settings_panel, style="Plain.TFrame")
         source_row.grid(row=1, column=0, sticky="ew", pady=(10, 8))
         source_row.columnconfigure(0, weight=1)
         source_entry = ttk.Entry(
@@ -565,7 +617,7 @@ class PlaylistGeneratorApp:
             command=self.choose_source_folder,
         ).grid(row=0, column=1, sticky="e")
 
-        source_actions = ttk.Frame(self.left_panel, style="Plain.TFrame")
+        source_actions = ttk.Frame(settings_panel, style="Plain.TFrame")
         source_actions.grid(row=2, column=0, sticky="ew", pady=(0, 10))
         source_actions.columnconfigure(0, weight=1)
         source_actions.columnconfigure(1, weight=1)
@@ -582,7 +634,7 @@ class PlaylistGeneratorApp:
             command=self.add_source_files,
         ).grid(row=0, column=1, sticky="ew", padx=(6, 0))
 
-        source_list_frame = Frame(self.left_panel, bg="#ffffff")
+        source_list_frame = Frame(settings_panel, bg="#ffffff")
         source_list_frame.grid(row=3, column=0, sticky="ew", pady=(0, 10))
         source_list_frame.columnconfigure(0, weight=1)
         self.source_tree = ttk.Treeview(
@@ -601,7 +653,7 @@ class PlaylistGeneratorApp:
         source_scrollbar.grid(row=0, column=1, sticky="ns")
         self.source_tree.configure(yscrollcommand=source_scrollbar.set)
 
-        source_manage = ttk.Frame(self.left_panel, style="Plain.TFrame")
+        source_manage = ttk.Frame(settings_panel, style="Plain.TFrame")
         source_manage.grid(row=4, column=0, sticky="ew", pady=(0, 16))
         source_manage.columnconfigure(0, weight=1)
         source_manage.columnconfigure(1, weight=1)
@@ -619,17 +671,17 @@ class PlaylistGeneratorApp:
         ).grid(row=0, column=1, sticky="ew", padx=(6, 0))
 
         ttk.Checkbutton(
-            self.left_panel,
+            settings_panel,
             text="Scan subfolder juga",
             variable=self.recursive_scan,
             command=self.refresh_songs,
             style="Clean.TCheckbutton",
         ).grid(row=5, column=0, sticky="w", pady=(0, 20))
 
-        ttk.Label(self.left_panel, text="Jenis & Jumlah File", style="PanelTitle.TLabel").grid(
+        ttk.Label(settings_panel, text="Jenis & Jumlah File", style="PanelTitle.TLabel").grid(
             row=6, column=0, sticky="w"
         )
-        filter_box = ttk.Frame(self.left_panel, style="Plain.TFrame")
+        filter_box = ttk.Frame(settings_panel, style="Plain.TFrame")
         filter_box.grid(row=7, column=0, sticky="ew", pady=(10, 12))
         filter_box.columnconfigure(1, weight=1)
         for index, (key, (label, _extensions)) in enumerate(FILE_TYPES.items()):
@@ -649,10 +701,10 @@ class PlaylistGeneratorApp:
                 variable=self.type_counts[key],
                 command=lambda _value, item_key=key: self.on_type_count_change(item_key),
                 bg="#ffffff",
-                fg="#16211d",
-                troughcolor="#dfe7e3",
+                fg="#101820",
+                troughcolor="#dce6ec",
                 highlightthickness=0,
-                activebackground="#24705d",
+                activebackground="#0f766e",
                 font=("Segoe UI", 8),
                 showvalue=False,
             )
@@ -668,24 +720,24 @@ class PlaylistGeneratorApp:
                 command=lambda item_key=key: self.on_type_count_change(item_key),
                 font=("Segoe UI", 9),
                 relief="flat",
-                bg="#f8faf9",
-                fg="#16211d",
-                buttonbackground="#e8efeb",
+                bg="#fbfdfe",
+                fg="#101820",
+                buttonbackground="#edf3f6",
                 highlightthickness=1,
-                highlightbackground="#ccd8d2",
-                highlightcolor="#24705d",
+                highlightbackground="#cfdae2",
+                highlightcolor="#0f766e",
             )
             spinbox.grid(row=index, column=2, sticky="e", pady=4, ipady=4)
             self.count_spinboxes[key] = spinbox
 
-        ttk.Label(self.left_panel, textvariable=self.counts_text, style="Muted.TLabel").grid(
+        ttk.Label(settings_panel, textvariable=self.counts_text, style="Muted.TLabel").grid(
             row=8, column=0, sticky="w", pady=(0, 18)
         )
 
-        ttk.Label(self.left_panel, text="Cara Memilih", style="PanelTitle.TLabel").grid(
+        ttk.Label(settings_panel, text="Cara Memilih", style="PanelTitle.TLabel").grid(
             row=9, column=0, sticky="w"
         )
-        mode_box = ttk.Frame(self.left_panel, style="Plain.TFrame")
+        mode_box = ttk.Frame(settings_panel, style="Plain.TFrame")
         mode_box.grid(row=10, column=0, sticky="ew", pady=(10, 20))
         for index, (label, value) in enumerate(
             [
@@ -703,10 +755,10 @@ class PlaylistGeneratorApp:
                 style="Clean.TRadiobutton",
             ).grid(row=index, column=0, sticky="w", pady=3)
 
-        ttk.Label(self.left_panel, text="Folder Tujuan", style="PanelTitle.TLabel").grid(
+        ttk.Label(settings_panel, text="Folder Tujuan", style="PanelTitle.TLabel").grid(
             row=11, column=0, sticky="w"
         )
-        destination_row = ttk.Frame(self.left_panel, style="Plain.TFrame")
+        destination_row = ttk.Frame(settings_panel, style="Plain.TFrame")
         destination_row.grid(row=12, column=0, sticky="ew", pady=(10, 20))
         destination_row.columnconfigure(0, weight=1)
         destination_entry = ttk.Entry(
@@ -724,19 +776,42 @@ class PlaylistGeneratorApp:
         ).grid(row=0, column=1, sticky="e")
 
         action_row = ttk.Frame(self.left_panel, style="Plain.TFrame")
-        action_row.grid(row=13, column=0, sticky="ew")
+        action_row.grid(row=1, column=0, sticky="ew", pady=(14, 0))
         action_row.columnconfigure(0, weight=1)
-        ttk.Button(
+        self.generate_button = ttk.Button(
             action_row,
             text="Generate & Copy",
             style="Primary.TButton",
             command=self.generate_playlist,
-        ).grid(row=0, column=0, sticky="ew")
+        )
+        self.generate_button.grid(row=0, column=0, sticky="ew")
 
         if DND_AVAILABLE:
             self.register_drop_target(source_row)
             self.register_drop_target(source_list_frame)
             self.register_drop_target(self.source_tree)
+
+        self.bind_settings_mousewheel(settings_panel)
+
+    def bind_settings_mousewheel(self, widget) -> None:
+        if not isinstance(widget, (ttk.Treeview, Scale, Spinbox)):
+            widget.bind("<MouseWheel>", self.on_settings_mousewheel, add="+")
+            widget.bind("<Button-4>", self.on_settings_mousewheel, add="+")
+            widget.bind("<Button-5>", self.on_settings_mousewheel, add="+")
+        for child in widget.winfo_children():
+            self.bind_settings_mousewheel(child)
+
+    def on_settings_mousewheel(self, event) -> str:
+        if not hasattr(self, "settings_canvas"):
+            return "break"
+        if getattr(event, "num", None) == 4:
+            delta = -1
+        elif getattr(event, "num", None) == 5:
+            delta = 1
+        else:
+            delta = -1 * int(event.delta / 120)
+        self.settings_canvas.yview_scroll(delta, "units")
+        return "break"
 
     def _build_song_view(self) -> None:
         title_row = ttk.Frame(self.right_panel, style="Plain.TFrame")
@@ -837,9 +912,9 @@ class PlaylistGeneratorApp:
         self.preview_tree.bind("<ButtonPress-1>", self.on_preview_drag_start)
         self.preview_tree.bind("<B1-Motion>", self.on_preview_drag_motion)
         self.preview_tree.bind("<ButtonRelease-1>", self.on_preview_drag_release)
-        self.preview_tree.tag_configure("dragging", background="#d8ede7", foreground="#16211d")
-        self.preview_tree.tag_configure("drop-target", background="#c7e4da", foreground="#16211d")
-        self.preview_tree.tag_configure("moved", background="#e2f2ed", foreground="#16211d")
+        self.preview_tree.tag_configure("dragging", background="#d7f3ed", foreground="#101820")
+        self.preview_tree.tag_configure("drop-target", background="#bfe8df", foreground="#101820")
+        self.preview_tree.tag_configure("moved", background="#e0f5f0", foreground="#101820")
 
         preview_scrollbar = ttk.Scrollbar(
             preview_frame,
@@ -876,10 +951,10 @@ class PlaylistGeneratorApp:
             wrap="none",
             borderwidth=0,
             highlightthickness=1,
-            highlightcolor="#ccd8d2",
-            highlightbackground="#ccd8d2",
-            bg="#f8faf9",
-            fg="#16211d",
+            highlightcolor="#cfdae2",
+            highlightbackground="#cfdae2",
+            bg="#fbfdfe",
+            fg="#101820",
             font=("Consolas", 9),
         )
         self.timestamp_box.grid(row=0, column=0, sticky="ew")
@@ -892,7 +967,7 @@ class PlaylistGeneratorApp:
         )
         timestamp_scrollbar.grid(row=0, column=1, sticky="ns")
         self.timestamp_box.configure(yscrollcommand=timestamp_scrollbar.set)
-        self.set_timestamp_text("Timestamp akan dibuat setelah Generate & Copy berhasil.")
+        self.set_timestamp_text("Timestamp akan tampil otomatis setelah Preview Output berisi audio atau video.")
 
     def _build_empty_state(self) -> None:
         self.empty_panel = ttk.Frame(self.container, style="Panel.TFrame", padding=34)
@@ -902,10 +977,10 @@ class PlaylistGeneratorApp:
 
         drop_zone = Frame(
             self.empty_panel,
-            bg="#f8faf9",
+            bg="#fbfdfe",
             highlightthickness=1,
-            highlightbackground="#ccd8d2",
-            highlightcolor="#24705d",
+            highlightbackground="#cfdae2",
+            highlightcolor="#0f766e",
         )
         drop_zone.grid(row=0, column=0, sticky="nsew")
         drop_zone.columnconfigure(0, weight=1)
@@ -986,6 +1061,26 @@ class PlaylistGeneratorApp:
         folder = filedialog.askdirectory(title="Pilih folder tujuan playlist")
         if folder:
             self.destination_folder.set(folder)
+
+    def ask_generate_destination(self) -> Path | None:
+        previous_destination = self.destination_folder.get().strip()
+        options = {"title": "Pilih folder tujuan untuk hasil generate"}
+        if previous_destination and Path(previous_destination).is_dir():
+            options["initialdir"] = previous_destination
+
+        folder = filedialog.askdirectory(**options)
+        if not folder:
+            self.status_text.set("Generate dibatalkan. Folder tujuan belum dipilih.")
+            return None
+
+        destination = Path(folder)
+        if not destination.exists() or not destination.is_dir():
+            messagebox.showwarning("Folder tujuan belum valid", "Pilih folder tujuan yang valid.")
+            self.status_text.set("Folder tujuan belum valid.")
+            return None
+
+        self.destination_folder.set(str(destination))
+        return destination
 
     def register_drop_target(self, widget) -> None:
         try:
@@ -1309,7 +1404,6 @@ class PlaylistGeneratorApp:
         grouped = self.songs_by_category()
         quotas = self.desired_counts()
         total_count = sum(quotas.values())
-        self.reset_timestamp_box()
 
         if mode == "manual":
             picked_by_type = {key: 0 for key in FILE_TYPES}
@@ -1458,6 +1552,7 @@ class PlaylistGeneratorApp:
             text=f"{len(songs)} file siap | {locked_count} locked"
         )
         if not songs:
+            self.schedule_timestamp_preview([])
             return
 
         plan = self.build_copy_plan(songs, Path(self.destination_folder.get().strip() or "."))
@@ -1493,6 +1588,7 @@ class PlaylistGeneratorApp:
                     iid=item_id,
                     text=self.preview_item_text(song, target.name),
                 )
+        self.schedule_timestamp_preview(songs)
 
     def preview_item_text(self, song: Song, output_name: str, drag_marker: str = "") -> str:
         prefix = ""
@@ -1661,7 +1757,6 @@ class PlaylistGeneratorApp:
 
         self.selected_songs = ordered
         self.custom_preview_order = [self.song_key(song) for song in ordered]
-        self.reset_timestamp_box()
         self.update_preview_tree(self.selected_songs)
         if moved_item_ids:
             moved_keys = {
@@ -1678,9 +1773,60 @@ class PlaylistGeneratorApp:
         self.status_text.set("Urutan preview diperbarui. Generate akan mengikuti urutan ini.")
 
     def reset_timestamp_box(self) -> None:
+        self.cancel_timestamp_preview()
         self.timestamp_text = ""
-        self.set_timestamp_text("Timestamp akan dibuat setelah Generate & Copy berhasil.")
+        self.set_timestamp_text("Timestamp akan tampil otomatis setelah Preview Output berisi audio atau video.")
         self.copy_timestamp_button.configure(state="disabled")
+
+    def cancel_timestamp_preview(self) -> None:
+        self.timestamp_preview_revision += 1
+        if self.timestamp_preview_after_id is not None:
+            try:
+                self.root.after_cancel(self.timestamp_preview_after_id)
+            except Exception:
+                pass
+            self.timestamp_preview_after_id = None
+
+    def schedule_timestamp_preview(self, songs: list[Song]) -> None:
+        self.cancel_timestamp_preview()
+        media_songs = [song for song in songs if song.category in {"music", "video"}]
+        if not media_songs:
+            self.timestamp_text = ""
+            self.set_timestamp_text("Timestamp akan tampil otomatis setelah Preview Output berisi audio atau video.")
+            self.copy_timestamp_button.configure(state="disabled")
+            return
+
+        revision = self.timestamp_preview_revision
+        self.timestamp_text = ""
+        self.set_timestamp_text("Membaca durasi audio/video untuk preview timestamp...")
+        self.copy_timestamp_button.configure(state="disabled")
+        self.timestamp_preview_after_id = self.root.after(
+            300,
+            self.start_timestamp_preview_worker,
+            songs.copy(),
+            revision,
+        )
+
+    def start_timestamp_preview_worker(self, songs: list[Song], revision: int) -> None:
+        self.timestamp_preview_after_id = None
+        thread = threading.Thread(
+            target=self.build_timestamp_preview_worker,
+            args=(songs, revision),
+            daemon=True,
+        )
+        thread.start()
+
+    def build_timestamp_preview_worker(self, songs: list[Song], revision: int) -> None:
+        text = self.build_timestamp_text(songs)
+        can_copy = any(song.category in {"music", "video"} for song in songs)
+        self.root.after(0, self.apply_timestamp_preview, text, can_copy, revision)
+
+    def apply_timestamp_preview(self, text: str, can_copy: bool, revision: int) -> None:
+        if revision != self.timestamp_preview_revision:
+            return
+        self.timestamp_text = text if can_copy else ""
+        self.set_timestamp_text(text)
+        self.copy_timestamp_button.configure(state="normal" if can_copy else "disabled")
 
     def set_timestamp_text(self, text: str) -> None:
         self.timestamp_box.configure(state="normal")
@@ -1729,6 +1875,9 @@ class PlaylistGeneratorApp:
         if duration is not None:
             return duration
         duration = self.read_duration_with_mutagen(path)
+        if duration is not None:
+            return duration
+        duration = self.read_duration_from_iso_video_atoms(path)
         if duration is not None:
             return duration
         duration = self.read_duration_from_mp3_frames(path)
@@ -1793,6 +1942,125 @@ class PlaylistGeneratorApp:
         except (TypeError, ValueError):
             return None
         return duration_value if duration_value > 0 else None
+
+    @staticmethod
+    def read_duration_from_iso_video_atoms(path: Path) -> float | None:
+        if path.suffix.lower() not in ISO_VIDEO_EXTENSIONS:
+            return None
+
+        try:
+            file_size = path.stat().st_size
+            with path.open("rb") as file:
+                return PlaylistGeneratorApp.read_iso_duration_boxes(file, 0, file_size, 0)
+        except Exception:
+            return None
+
+    @staticmethod
+    def read_iso_duration_boxes(file, start: int, end: int, depth: int) -> float | None:
+        if depth > 6 or end <= start:
+            return None
+
+        container_boxes = {
+            b"moov",
+            b"trak",
+            b"mdia",
+            b"minf",
+            b"stbl",
+            b"edts",
+            b"udta",
+            b"mvex",
+            b"meta",
+        }
+        preferred_duration: float | None = None
+        fallback_duration: float | None = None
+        offset = start
+
+        while offset + 8 <= end:
+            file.seek(offset)
+            header = file.read(8)
+            if len(header) != 8:
+                break
+
+            box_size = int.from_bytes(header[:4], "big")
+            box_type = header[4:8]
+            header_size = 8
+
+            if box_size == 1:
+                large_size = file.read(8)
+                if len(large_size) != 8:
+                    break
+                box_size = int.from_bytes(large_size, "big")
+                header_size = 16
+            elif box_size == 0:
+                box_size = end - offset
+
+            if box_size < header_size:
+                break
+
+            box_end = min(offset + box_size, end)
+            data_start = offset + header_size
+
+            if box_type == b"mvhd":
+                duration = PlaylistGeneratorApp.parse_iso_duration_box(file, data_start, box_end)
+                if duration is not None:
+                    return duration
+            elif box_type == b"mdhd":
+                duration = PlaylistGeneratorApp.parse_iso_duration_box(file, data_start, box_end)
+                if duration is not None:
+                    fallback_duration = max(fallback_duration or 0, duration)
+            elif box_type in container_boxes:
+                child_start = data_start + (4 if box_type == b"meta" else 0)
+                child_duration = PlaylistGeneratorApp.read_iso_duration_boxes(
+                    file,
+                    child_start,
+                    box_end,
+                    depth + 1,
+                )
+                if child_duration is not None:
+                    if box_type == b"moov":
+                        preferred_duration = child_duration
+                    else:
+                        fallback_duration = max(fallback_duration or 0, child_duration)
+
+            offset = box_end
+
+        return preferred_duration or fallback_duration
+
+    @staticmethod
+    def parse_iso_duration_box(file, start: int, end: int) -> float | None:
+        if end - start < 16:
+            return None
+
+        file.seek(start)
+        header = file.read(4)
+        if len(header) != 4:
+            return None
+
+        version = header[0]
+        if version == 1:
+            needed = 32
+            if end - start < needed:
+                return None
+            payload = file.read(28)
+            if len(payload) != 28:
+                return None
+            timescale = int.from_bytes(payload[16:20], "big")
+            duration_units = int.from_bytes(payload[20:28], "big")
+        else:
+            needed = 20
+            if end - start < needed:
+                return None
+            payload = file.read(16)
+            if len(payload) != 16:
+                return None
+            timescale = int.from_bytes(payload[8:12], "big")
+            duration_units = int.from_bytes(payload[12:16], "big")
+
+        if timescale <= 0 or duration_units <= 0:
+            return None
+
+        duration = duration_units / timescale
+        return duration if duration > 0 else None
 
     @staticmethod
     def read_duration_from_mp3_frames(path: Path) -> float | None:
@@ -1956,7 +2224,6 @@ class PlaylistGeneratorApp:
     def generate_playlist(self) -> None:
         if len(self.selected_songs) != self.get_total_count():
             self.update_selection_preview()
-        destination_text = self.destination_folder.get().strip()
 
         if not self.songs:
             messagebox.showwarning("Belum ada file", "Pilih folder atau file yang didukung.")
@@ -1976,17 +2243,9 @@ class PlaylistGeneratorApp:
                 f"Pilih {self.get_total_count()} file sesuai kuota jenis file.",
             )
             return
-        if not destination_text:
-            messagebox.showwarning(
-                "Folder tujuan belum dipilih",
-                "Tentukan folder tujuan terlebih dahulu sebelum generate playlist.",
-            )
-            self.status_text.set("Pilih folder tujuan terlebih dahulu.")
-            return
 
-        destination = Path(destination_text)
-        if not destination.exists() or not destination.is_dir():
-            messagebox.showwarning("Folder tujuan belum valid", "Pilih folder tujuan yang valid.")
+        destination = self.ask_generate_destination()
+        if destination is None:
             return
 
         thread = threading.Thread(
